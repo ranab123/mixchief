@@ -1,11 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import Link from "next/link";
-import { useParams } from "next/navigation";
+import ProfileExperience from "@/app/components/ProfileExperience";
+import type { VinylStackItem } from "@/app/components/VinylStack3D";
+import { useVinylPlayer } from "@/hooks/useVinylPlayer";
+import { buildProfileUrl } from "@/lib/url";
 
-interface Video {
+interface Profile {
+  id: string;
+  username: string;
+  display_name: string | null;
+}
+
+interface VideoRow {
   id: string;
   title: string;
   channel_title: string;
@@ -13,176 +22,205 @@ interface Video {
   thumbnail_url: string;
   video_id: string;
   created_at: string;
+  user_id: string;
 }
 
-interface Profile {
-  id: string;
-  username: string;
-  display_name: string | null;
-  avatar_url: string | null;
-}
-
-export default function ProfilePage() {
-  // Use the useParams hook to get the username parameter
+export default function PublicProfilePage() {
   const params = useParams();
   const username = params.username as string;
-  
+  const router = useRouter();
+
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [videos, setVideos] = useState<Video[]>([]);
+  const [videos, setVideos] = useState<VideoRow[]>([]);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
+  const [shareCopied, setShareCopied] = useState(false);
+  const shareCopiedTimeoutRef = useRef<number | null>(null);
+
+  const {
+    activeVideoId,
+    isPlaying,
+    currentTime,
+    clearSelectionKey,
+    activeLabelSrc,
+    playOrToggle,
+    handleSeek,
+    stop,
+    setClearSelectionKey,
+  } = useVinylPlayer();
+
   useEffect(() => {
     async function loadProfileData() {
       try {
         setLoading(true);
-        
-        // Get profile by username
-        const { data: profileData, error: profileError } = await supabase
+        setError(null);
+
+        const { data: profileData, error: profileError } = (await supabase
           .from("profiles")
-          .select("*")
+          .select("id, username, display_name")
           .eq("username", username)
-          .single() as {
-            data: any;
-            error: any;
-          };
-          
+          .single()) as {
+          data: Profile | null;
+          error: any;
+        };
+
         if (profileError || !profileData) {
           setError("Profile not found");
           setLoading(false);
           return;
         }
-        
-        const typedProfile: Profile = {
-          id: profileData.id,
-          username: profileData.username,
-          display_name: profileData.display_name,
-          avatar_url: profileData.avatar_url
-        };
-        
-        setProfile(typedProfile);
-        
-        // Get videos for this profile
-        const { data: videosData, error: videosError } = await supabase
+
+        setProfile(profileData);
+
+        const { data: videosData, error: videosError } = (await supabase
           .from("videos")
           .select("*")
-          .eq("user_id", typedProfile.id)
-          .order("created_at", { ascending: false }) as { 
-            data: any[] | null; 
-            error: any 
-          };
-          
+          .eq("user_id", profileData.id)
+          .order("created_at", { ascending: false })) as {
+          data: VideoRow[] | null;
+          error: any;
+        };
+
         if (videosError) {
-          console.error("Error loading videos:", videosError);
+          console.error("[PublicProfile] Error loading videos:", videosError);
+          setVideos([]);
         } else {
+          console.log(
+            "[PublicProfile] Loaded videos for profile",
+            profileData.username,
+            "count=",
+            videosData?.length ?? 0
+          );
           setVideos(videosData || []);
         }
-        
-        // Check if the current user is viewing their own profile
-        const { data: { user } } = await supabase.auth.getUser();
-        setIsOwnProfile(user?.id === typedProfile.id);
-        
+
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        const own = user?.id === profileData.id;
+        console.log(
+          "[PublicProfile] isOwnProfile?",
+          own,
+          "viewerId=",
+          user?.id,
+          "profileId=",
+          profileData.id
+        );
+        setIsOwnProfile(own);
       } catch (err) {
-        console.error("Error loading profile:", err);
+        console.error("[PublicProfile] Error loading profile:", err);
         setError("Error loading profile");
       } finally {
         setLoading(false);
       }
     }
-    
+
     loadProfileData();
   }, [username]);
-  
+
+  useEffect(() => {
+    return () => {
+      if (shareCopiedTimeoutRef.current) {
+        window.clearTimeout(shareCopiedTimeoutRef.current);
+        shareCopiedTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  function copyProfileUrl() {
+    if (!profile || typeof window === "undefined") return;
+    const url = buildProfileUrl(profile.username);
+    navigator.clipboard.writeText(url);
+    setShareCopied(true);
+    if (shareCopiedTimeoutRef.current) {
+      window.clearTimeout(shareCopiedTimeoutRef.current);
+    }
+    shareCopiedTimeoutRef.current = window.setTimeout(() => {
+      setShareCopied(false);
+      shareCopiedTimeoutRef.current = null;
+    }, 1000);
+  }
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    router.push("/");
+  }
+
   if (loading) {
     return (
       <div className="container mx-auto py-8 px-4 flex flex-col items-center justify-center min-h-screen">
-        <div className="w-16 h-16 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-16 h-16 border-4 border-black border-t-transparent rounded-full animate-spin" />
         <p className="mt-4 text-gray-600">Loading profile...</p>
       </div>
     );
   }
-  
+
   if (error || !profile) {
     return (
       <div className="container mx-auto py-8 px-4">
-        <Link href="/" className="text-blue-600 hover:underline mb-4 inline-block">
+        <button
+          type="button"
+          onClick={() => router.push("/")}
+          className="text-blue-600 hover:underline mb-4 inline-block"
+        >
           ← Back to Home
-        </Link>
+        </button>
         <div className="mt-8 text-center">
           <h2 className="text-2xl font-bold text-red-500">Profile Not Found</h2>
-          <p className="mt-2 text-gray-600">The profile you're looking for doesn't exist or has been removed.</p>
+          <p className="mt-2 text-gray-600">
+            The profile you're looking for doesn't exist or has been removed.
+          </p>
         </div>
       </div>
     );
   }
+
+  const vinylItems: VinylStackItem[] = videos.map((video) => ({
+    src: video.thumbnail_url,
+    videoId: video.video_id,
+    id: video.id,
+    title: video.title,
+    channelTitle: video.channel_title,
+    created_at: video.created_at,
+    duration: video.duration,
+  }));
+
+  function triggerPlayback(videoId: string, fadeIn: boolean) {
+    const match = vinylItems.find((item) => item.videoId === videoId);
+    playOrToggle(videoId, fadeIn, match?.src);
+  }
+
+  const handlePlayRequest = (videoId: string) => triggerPlayback(videoId, true);
+  const handleToggleRequest = (videoId: string) => triggerPlayback(videoId, false);
   
+  function handleCloseActive() {
+    // Stop the YouTube player and clear active video
+    stop();
+    // Clear vinyl selection in VinylStack3D
+    setClearSelectionKey((k) => k + 1);
+  }
+
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="mb-8">
-        <Link href="/" className="text-blue-600 hover:underline mb-4 inline-block">
-          ← Back to Home
-        </Link>
-        
-        <div className="flex items-center gap-4 mt-4">
-          <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
-            {profile.avatar_url ? (
-              <img 
-                src={profile.avatar_url} 
-                alt={profile.username} 
-                className="w-full h-full rounded-full object-cover"
-              />
-            ) : (
-              <span className="text-2xl font-bold text-gray-500">
-                {profile.username.charAt(0).toUpperCase()}
-              </span>
-            )}
-          </div>
-          
-          <div>
-            <h1 className="text-2xl font-bold">
-              {profile.display_name || profile.username}
-            </h1>
-            <p className="text-gray-600">@{profile.username}</p>
-            {isOwnProfile && (
-              <p className="text-sm text-gray-500 mt-1">This is your profile</p>
-            )}
-          </div>
-        </div>
-      </div>
-      
-      <h2 className="text-xl font-bold mb-4">Videos</h2>
-      
-      {videos.length === 0 ? (
-        <p className="text-gray-500">No videos yet.</p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {videos.map((video) => (
-            <div key={video.id} className="bg-white rounded-lg shadow overflow-hidden">
-              <a 
-                href={`https://youtube.com/watch?v=${video.video_id}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="block"
-              >
-                <div className="aspect-video w-full overflow-hidden">
-                  <img 
-                    src={video.thumbnail_url} 
-                    alt={video.title} 
-                    className="w-full object-cover"
-                  />
-                </div>
-                
-                <div className="p-4">
-                  <h3 className="font-bold line-clamp-2">{video.title}</h3>
-                  <p className="text-gray-600 text-sm mt-1">{video.channel_title}</p>
-                  <p className="text-gray-500 text-xs mt-1">Duration: {video.duration}</p>
-                </div>
-              </a>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <main className="flex flex-col items-center justify-center min-h-screen py-8 relative">
+      <ProfileExperience
+        shareCopied={shareCopied}
+        onCopyProfileUrl={copyProfileUrl}
+        onSignOut={isOwnProfile ? handleSignOut : undefined}
+        showOwnerActions={isOwnProfile}
+        videos={vinylItems}
+        isPlaying={isPlaying}
+        currentTime={currentTime}
+        clearSelectionKey={clearSelectionKey}
+        onRequestPlay={handlePlayRequest}
+        onRequestToggle={handleToggleRequest}
+        onSeek={handleSeek}
+        activeVideoId={activeVideoId}
+        onHomeClick={() => router.push("/")}
+        onCloseActive={handleCloseActive}
+        showAddControl={false}
+      />
+    </main>
   );
 }

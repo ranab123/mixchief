@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
-import { Environment, useTexture, ContactShadows } from "@react-three/drei";
+import { Environment, ContactShadows, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
@@ -106,7 +106,6 @@ function Disc3D({
           // Positive spin (counter-clockwise) = backward
           // Scale: full rotation (2*PI radians) = MAX_SEEK_SECONDS
           const deltaSeconds = -(accumulatedSpinRef.current / (2 * Math.PI)) * MAX_SEEK_SECONDS;
-          console.log('[Disc3D] Seek by', deltaSeconds, 'seconds (spin:', accumulatedSpinRef.current, 'radians)');
           onSeek(deltaSeconds);
         }
         accumulatedSpinRef.current = 0;
@@ -114,7 +113,6 @@ function Disc3D({
       onPointerOut={() => {
         if (draggingRef.current && onSeek && Math.abs(accumulatedSpinRef.current) > SEEK_THRESHOLD) {
           const deltaSeconds = -(accumulatedSpinRef.current / (2 * Math.PI)) * MAX_SEEK_SECONDS;
-          console.log('[Disc3D] Seek by', deltaSeconds, 'seconds (pointer out)');
           onSeek(deltaSeconds);
         }
         draggingRef.current = false;
@@ -201,6 +199,7 @@ interface VinylStack3DProps {
   onSelect?: (item: VinylStackItem, index: number) => void;
   onRequestPlay?: (videoId: string) => void;
   onRequestToggle?: (videoId: string) => void;
+  onDelete?: (item: VinylStackItem, index: number) => void;
   onSeek?: (deltaSeconds: number) => void;
   isPlaying?: boolean;
   currentTime?: number; // Current playback time in seconds
@@ -427,6 +426,7 @@ export default function VinylStack3D({
   onSelect,
   onRequestPlay,
   onRequestToggle,
+  onDelete,
   onSeek,
   isPlaying = false,
   currentTime = 0,
@@ -493,6 +493,7 @@ export default function VinylStack3D({
   // Allow parent to force-clear the current selection (e.g., when closing player)
   useEffect(() => {
     if (!clearSelectionKey) return;
+
     setSelectedIndex((prev) => {
       if (prev === null) return prev;
       deselectionTimeRef.current = performance.now();
@@ -502,11 +503,43 @@ export default function VinylStack3D({
         clearTimeout(overlayTimerRef.current);
         overlayTimerRef.current = null;
       }
+      overlayAlphaRef.current = 1;
+      setOverlayAlpha(1);
       overlayTargetRef.current = 0;
+      if (discTimerRef.current !== null) {
+        clearTimeout(discTimerRef.current);
+        discTimerRef.current = null;
+      }
       setShowDisc(false);
       return null;
     });
-  }, [clearSelectionKey]);
+
+    const n = items.length;
+    if (n > 0) {
+      const zeros = Array(n).fill(0);
+      const ones = Array(n).fill(1);
+
+      hoverTargetsRef.current = zeros.slice();
+      hoverProgressesRef.current = zeros.slice();
+      setHoverProgresses(zeros);
+
+      faceTargetsRef.current = zeros.slice();
+      faceProgressesRef.current = zeros.slice();
+      setFaceProgresses(zeros);
+
+      fadeTargetsRef.current = ones.slice();
+      fadeProgressesRef.current = ones.slice();
+      setFadeProgresses(ones);
+    }
+
+    // Prevent any vinyl from rendering above others while resetting
+    deselectionTimeRef.current = null;
+    lastSelectedIndexRef.current = null;
+    hoverLockIndexRef.current = null;
+    // Also reset disc appearance delay
+    discStartArmedRef.current = false;
+    setShowDisc(false);
+  }, [clearSelectionKey, items.length]);
   const discStartArmedRef = useRef<boolean>(false);
   const discTiltXTargetRef = useRef<number>(0); // normalized -1..1
   const discTiltYTargetRef = useRef<number>(0); // normalized -1..1
@@ -606,23 +639,15 @@ export default function VinylStack3D({
         }
         if (changed2) setFaceProgresses(nextFace);
       }
-      // per-item fade easing
+      // per-item fade easing (no cooldown; when targets go back to 1, everything fades in together)
       const fdp = fadeProgressesRef.current;
       const fdt = fadeTargetsRef.current;
       if (fdp.length === fdt.length && fdp.length > 0) {
         let changed3 = false;
         const nextFade = new Array(fdp.length);
-        const now = performance.now();
         for (let i = 0; i < fdp.length; i++) {
           const v = fdp[i];
-          let tv = fdt[i];
-          // If deselecting (no selection), only restore visibility 0.75s after deselection
-          if (selectedIndex === null && tv === 1 && deselectionTimeRef.current !== null) {
-            const elapsed = now - deselectionTimeRef.current;
-            if (elapsed < 750) {
-              tv = 0; // keep hidden until 0.75s have passed
-            }
-          }
+          const tv = fdt[i];
           const nv = v + (tv - v) * FADE_EASE;
           nextFade[i] = nv;
           if (Math.abs(nv - v) > 0.0005) changed3 = true;
@@ -646,14 +671,7 @@ export default function VinylStack3D({
           }
           discTimerRef.current = window.setTimeout(() => {
             setShowDisc(true);
-            // When disc appears, request playback of the selected video's audio
-            try {
-              const idx = selectedIndexRef.current;
-              const vid = (idx !== null && items[idx]?.videoId) ? items[idx].videoId : undefined;
-              if (vid && typeof onRequestPlay === "function") {
-                onRequestPlay(vid);
-              }
-            } catch {}
+            // Audio playback already started when vinyl was clicked, no need to call again
           }, 500);
         }
         // If overlay is hiding, cancel disc and disarm
@@ -738,18 +756,9 @@ export default function VinylStack3D({
 
         <group>
           {items.map((item, i) => {
-            // Hide other items while one is selected.
-            // After deselecting, keep others hidden for 0.75s, but keep the returning vinyl visible.
-            const nowTs = performance.now();
-            const inCooldown =
-              selectedIndex === null &&
-              deselectionTimeRef.current !== null &&
-              nowTs - deselectionTimeRef.current < 750;
-            // Hover gating will be handled via hoverLockIndexRef (not time-based)
-            if (
-              (selectedIndex !== null && selectedIndex !== i) ||
-              (inCooldown && lastSelectedIndexRef.current !== i)
-            ) {
+            // Hide other items only while one is actively selected.
+            // When selection is cleared, show the full stack immediately again.
+            if (selectedIndex !== null && selectedIndex !== i) {
               return null;
             }
 
@@ -763,9 +772,7 @@ export default function VinylStack3D({
             const p = hoverProgresses[i] ?? 0;
             const faceP = faceProgresses[i] ?? 0;
             const faceTarget = faceTargetsRef.current[i] ?? 0;
-            if (selectedIndex === i) {
-              console.log(`[VinylStack3D Render] Item ${i} faceP:`, faceP, 'target:', faceTarget);
-            }
+            // no-op logging removed
             // Allow lateral offset only when rotation is largely finished and this vinyl is not hover-locked
             if (p > 0 && faceP <= 0.05 && hoverLockIndexRef.current !== i) {
               const right = new THREE.Vector3(1, 0, 0).applyQuaternion(baseQuat); // local +X in world
@@ -788,6 +795,15 @@ export default function VinylStack3D({
               py = THREE.MathUtils.lerp(py, cy, faceP);
               pz = THREE.MathUtils.lerp(pz, cz, faceP);
             }
+
+            const badgeRadius = 0.12;
+            // Extra padding so the badge isn't glued to the edges
+            const badgePadding = 0.05;
+            const coverHalfWidth = (aspect * coverScale) / 2;
+            const coverHalfHeight = coverScale / 2;
+            const badgeX = coverHalfWidth - (badgeRadius + badgePadding);
+            const badgeY = -coverHalfHeight + (badgeRadius + badgePadding);
+            const badgeZ = (coverThickness * coverScale) / 2 + 0.03;
 
             return (
               <group
@@ -828,10 +844,8 @@ export default function VinylStack3D({
                       // Start audio playback immediately when vinyl is clicked
                       const vid = items[i]?.videoId;
                       if (vid && typeof onRequestPlay === "function") {
-                        console.log('[VinylStack3D] Selection: Starting playback immediately for videoId:', vid);
                         // Start audio right away with 3-second fade-in
                         setTimeout(() => {
-                          console.log('[VinylStack3D] Calling onRequestPlay with videoId:', vid);
                           onRequestPlay(vid);
                         }, 0);
                       }
@@ -840,7 +854,7 @@ export default function VinylStack3D({
                     const faceArr = faceTargetsRef.current.slice();
                     for (let j = 0; j < faceArr.length; j++) faceArr[j] = (nextSel === j ? 1 : 0);
                     faceTargetsRef.current = faceArr;
-                    console.log('[VinylStack3D] Face targets set:', faceArr, 'nextSel:', nextSel);
+                    // no-op logging removed
                     // set fade targets
                     const fadeArr = fadeTargetsRef.current.slice();
                     for (let j = 0; j < fadeArr.length; j++) fadeArr[j] = (nextSel === null ? 1 : (nextSel === j ? 1 : 0));
@@ -890,6 +904,60 @@ export default function VinylStack3D({
                     onClick={undefined}
                   />
                 </Suspense>
+                {p > 0.35 && onDelete && (
+                  <group
+                    position={[badgeX, badgeY, badgeZ]}
+                    onPointerOver={(e) => {
+                      e.stopPropagation();
+                      // Treat hovering the minus as hovering the cover
+                      const arr = hoverTargetsRef.current.slice();
+                      for (let j = 0; j < arr.length; j++) arr[j] = j === i ? 1 : 0;
+                      hoverTargetsRef.current = arr;
+                      // Show DELETE tooltip near cursor
+                      setTooltip({
+                        text: "DELETE",
+                        x: e.clientX + 12,
+                        y: e.clientY + 16,
+                        visible: true,
+                      });
+                    }}
+                    onPointerMove={(e) => {
+                      // Keep DELETE tooltip following the cursor
+                      setTooltip((prev) =>
+                        prev.visible && prev.text === "DELETE"
+                          ? { ...prev, x: e.clientX + 12, y: e.clientY + 16 }
+                          : prev
+                      );
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <mesh
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const label =
+                          (item as any)?.title
+                            ? String((item as any).title)
+                            : "this mix";
+                        const confirmed = window.confirm(
+                          `Remove "${label}" from your crate?`
+                        );
+                        if (confirmed) {
+                          onDelete(item, i);
+                        }
+                      }}
+                    >
+                      {/* Flat minus sign, aligned with the cover, using frosted-glass styling */}
+                      <boxGeometry args={[0.16, 0.02, 0.006]} />
+                      <meshStandardMaterial
+                        color="#ffffff"
+                        opacity={0.7}
+                        transparent
+                        roughness={0.9}
+                        metalness={0}
+                      />
+                    </mesh>
+                  </group>
+                )}
                 {/* increase roughness via an overlay material tweak by attaching keyframes isn't trivial declaratively per mesh,
                     so we rely on alpha modulation above; roughness is set on material in CoverPlane statically. */}
               </group>
@@ -927,7 +995,7 @@ export default function VinylStack3D({
           style={{
             position: "absolute",
             left: "50%",
-            top: "50%",
+            top: "45%", // nudge disc + text slightly upward
             transform: "translate(-50%, -50%)",
             zIndex: 110,
             display: "flex",
@@ -952,17 +1020,13 @@ export default function VinylStack3D({
                     pointerEvents: "auto",
                   }}
                   onClick={() => {
-                    console.log('[Disc onClick] Disc clicked');
                     const idx = selectedIndexRef.current;
-                    console.log('[Disc onClick] selectedIndexRef.current:', idx);
-                    const vid = (idx !== null && items[idx]?.videoId) ? items[idx].videoId : undefined;
-                    console.log('[Disc onClick] videoId:', vid);
-                    console.log('[Disc onClick] onRequestToggle:', typeof onRequestToggle);
+                    const vid =
+                      idx !== null && items[idx]?.videoId
+                        ? items[idx].videoId
+                        : undefined;
                     if (vid && typeof onRequestToggle === "function") {
-                      console.log('[Disc onClick] Calling onRequestToggle with videoId:', vid);
                       onRequestToggle(vid);
-                    } else {
-                      console.log('[Disc onClick] Not calling onRequestToggle. vid:', vid, 'onRequestToggle type:', typeof onRequestToggle);
                     }
                   }}
                   onPointerMove={(e) => {
@@ -998,8 +1062,9 @@ export default function VinylStack3D({
                         alignItems: "center",
                         gap: "12px",
                         width: "100%",
-                        fontFamily: "Supply, sans-serif",
+                        fontFamily: "IBM Plex Mono, monospace",
                         fontSize: "18px",
+                        fontWeight: "bold",
                         letterSpacing: "2px",
                         color: "#000000",
                         marginBottom: "12px",
@@ -1060,8 +1125,9 @@ export default function VinylStack3D({
                     {/* Title */}
                     <div
                       style={{
-                        fontFamily: "Supply, sans-serif",
+                        fontFamily: "IBM Plex Mono, monospace",
                         fontSize: "18px",
+                        fontWeight: "bold",
                         letterSpacing: "2px",
                         color: "#000000",
                         textAlign: "justify",
@@ -1080,8 +1146,9 @@ export default function VinylStack3D({
                         alignItems: "center",
                         gap: "12px",
                         width: "100%",
-                        fontFamily: "Supply, sans-serif",
+                        fontFamily: "IBM Plex Mono, monospace",
                         fontSize: "18px",
+                        fontWeight: "bold",
                         letterSpacing: "2px",
                         color: "#000000",
                       }}

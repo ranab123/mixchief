@@ -7,7 +7,7 @@ import ProfileExperience from "./components/ProfileExperience";
 import UsernameSetup from "./components/UsernameSetup";
 import { useYouTubePlayer } from "@/hooks/useYouTubePlayer";
 import { useVinylPlayer } from "@/hooks/useVinylPlayer";
-import { buildProfileUrl } from "@/lib/url";
+import { buildProfileUrl, getSiteUrl } from "@/lib/url";
  
 
 interface VideoData {

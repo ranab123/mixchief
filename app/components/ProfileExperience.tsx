@@ -37,7 +37,7 @@ export interface ProfileExperienceProps {
   onToggleAddInput?: () => void;
   onCloseActive?: () => void;
   onHomeClick?: () => void;
-  addControlRef?: RefObject<HTMLDivElement>;
+  addControlRef?: RefObject<HTMLDivElement | null>;
 }
 
 export default function ProfileExperience({

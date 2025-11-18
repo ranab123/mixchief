@@ -294,7 +294,13 @@ export default function Home() {
   }
 
   async function signIn() {
-    await supabase.auth.signInWithOAuth({ provider: "google" });
+    const redirectUrl = getSiteUrl();
+    await supabase.auth.signInWithOAuth({ 
+      provider: "google",
+      options: {
+        redirectTo: redirectUrl,
+      }
+    });
   }
 
   async function signOut() {

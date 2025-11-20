@@ -21,10 +21,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "DJ Crate",
+  title: "mixchief",
   description: "DJ Music Library",
   icons: {
-    icon: "/images/discc.png",
+    icon: [
+      { url: "/images/discc.png", type: "image/png" },
+    ],
     shortcut: "/images/discc.png",
     apple: "/images/discc.png",
   },

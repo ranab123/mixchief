@@ -94,7 +94,7 @@ export default function UsernameSetup({ userId, userEmail, onComplete }: Usernam
     <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-md">
       <h2 className="text-2xl font-bold mb-6 text-center">Choose a Username</h2>
       <p className="text-gray-600 mb-6 text-center">
-        Pick a unique username for your DJ Crate profile
+        Pick a unique username for your mixchief profile
       </p>
       
       <form onSubmit={handleSubmit}>

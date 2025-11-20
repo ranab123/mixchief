@@ -1161,7 +1161,7 @@ export default function VinylStack3D({
                     </div>
                     {/* Title */}
                     <a
-                      href={`https://www.youtube.com/watch?v=${items[selectedIndex].videoId}`}
+                      href={`https://www.youtube.com/watch?v=${items[selectedIndex].videoId}${currentTime > 0 ? `&t=${Math.floor(currentTime)}` : ''}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1177,6 +1177,7 @@ export default function VinylStack3D({
                         marginBottom: "12px",
                         textDecoration: "none",
                         cursor: "pointer",
+                        pointerEvents: "auto",
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.textDecoration = "underline";

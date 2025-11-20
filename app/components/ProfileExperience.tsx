@@ -107,20 +107,24 @@ export default function ProfileExperience({
         </div>
 
         <div className="mt-12 flex flex-col gap-1 text-sm font-bold tracking-[0.18em]">
-          <button
-            type="button"
-            className="text-gray-500 hover:text-black transition-colors text-left"
-            onClick={onHomeClick}
-          >
-            HOME
-          </button>
-          <button
-            type="button"
-            onClick={handleShare}
-            className="text-gray-500 hover:text-black transition-colors text-left"
-          >
-            {shareCopied ? "PROFILE LINK COPIED" : "SHARE PROFILE"}
-          </button>
+          {!showOwnerActions && (
+            <>
+              <button
+                type="button"
+                className="text-gray-500 hover:text-black transition-colors text-left"
+                onClick={onHomeClick}
+              >
+                HOME
+              </button>
+              <button
+                type="button"
+                onClick={handleShare}
+                className="text-gray-500 hover:text-black transition-colors text-left"
+              >
+                {shareCopied ? "PROFILE LINK COPIED" : "SHARE PROFILE"}
+              </button>
+            </>
+          )}
           {showOwnerActions && onSignOut && (
             <button
               type="button"

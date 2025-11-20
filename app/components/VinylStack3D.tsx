@@ -1160,8 +1160,12 @@ export default function VinylStack3D({
                       </div>
                     </div>
                     {/* Title */}
-                    <div
+                    <a
+                      href={`https://www.youtube.com/watch?v=${items[selectedIndex].videoId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       style={{
+                        display: "block",
                         fontFamily: "IBM Plex Mono, monospace",
                         fontSize: "18px",
                         fontWeight: "bold",
@@ -1171,10 +1175,18 @@ export default function VinylStack3D({
                         wordWrap: "break-word",
                         overflowWrap: "break-word",
                         marginBottom: "12px",
+                        textDecoration: "none",
+                        cursor: "pointer",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.textDecoration = "underline";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.textDecoration = "none";
                       }}
                     >
                       {String(items[selectedIndex].title).toUpperCase()}
-                    </div>
+                    </a>
                     {/* Channel (left) and Date (right), same size as title */}
                     <div
                       style={{

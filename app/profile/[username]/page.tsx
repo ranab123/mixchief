@@ -35,9 +35,14 @@ export default function PublicProfilePage() {
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showInput, setShowInput] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [inputError, setInputError] = useState<string | null>(null);
+  const [savingVideo, setSavingVideo] = useState(false);
 
   const [shareCopied, setShareCopied] = useState(false);
   const shareCopiedTimeoutRef = useRef<number | null>(null);
+  const addControlRef = useRef<HTMLDivElement | null>(null);
 
   const {
     activeVideoId,
@@ -128,6 +133,24 @@ export default function PublicProfilePage() {
       }
     };
   }, []);
+
+  // Close add-input when clicking outside of the plus/control
+  useEffect(() => {
+    if (!showInput) return;
+
+    function handleDocumentClick(event: MouseEvent) {
+      if (!addControlRef.current) return;
+      const target = event.target as Node | null;
+      if (target && !addControlRef.current.contains(target)) {
+        setShowInput(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleDocumentClick);
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentClick);
+    };
+  }, [showInput]);
 
   function copyProfileUrl() {
     if (!profile || typeof window === "undefined") return;
@@ -228,6 +251,137 @@ export default function PublicProfilePage() {
     }
   }
 
+  function toggleInput() {
+    setShowInput(!showInput);
+    setInputError(null);
+  }
+
+  function handleInputChange(value: string) {
+    setInputValue(value);
+    if (inputError) {
+      setInputError(null);
+    }
+  }
+
+  function extractYouTubeVideoId(url: string): string | null {
+    // Regular expressions to match various YouTube URL formats
+    const regexPatterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/|youtube\.com\/user\/.+\/\w{11}|youtube\.com\/\w{11})([^&?\n]+)/,
+      /youtube\.com\/watch\?.*v=([^&]+)/,
+      /youtu\.be\/([^?&]+)/,
+      /youtube\.com\/embed\/([^?&]+)/
+    ];
+    
+    for (const pattern of regexPatterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    
+    return null;
+  }
+
+  async function fetchYouTubeData(videoId: string) {
+    try {
+      setSavingVideo(true);
+      setInputError(null);
+      
+      // Use our server-side API route to protect the API key
+      const response = await fetch(`/api/youtube?videoId=${videoId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch video data');
+      }
+      
+      const videoData = await response.json();
+      
+      if (profile) {
+        await saveVideoToSupabase(videoData);
+      }
+      
+      setSavingVideo(false);
+      setInputValue(''); // Clear input after successful submission
+      setShowInput(false); // Hide input after successful submission
+    } catch (error: any) {
+      setInputError(error.message || "Failed to fetch video data");
+      setSavingVideo(false);
+    }
+  }
+
+  async function saveVideoToSupabase(videoData: any) {
+    if (!profile) return;
+    
+    try {
+      const videoToInsert = {
+        user_id: profile.id,
+        title: videoData.title,
+        channel_title: videoData.channelTitle,
+        duration: videoData.duration,
+        thumbnail_url: videoData.thumbnailUrl,
+        video_id: videoData.videoId
+      };
+
+      const { error } = await supabase
+        .from('videos')
+        .insert(videoToInsert as any);
+        
+      if (error) {
+        throw error;
+      }
+      
+      // Refresh the videos list
+      const { data: videosData, error: videosError } = (await supabase
+        .from("videos")
+        .select("*")
+        .eq("user_id", profile.id)
+        .order("created_at", { ascending: false })) as {
+        data: VideoRow[] | null;
+        error: any;
+      };
+
+      if (videosError) {
+        console.error("[PublicProfile] Error refreshing videos:", videosError);
+      } else {
+        setVideos(videosData || []);
+      }
+    } catch (error: any) {
+      console.error('Error saving video:', error);
+      setInputError(`Failed to save video: ${error.message}`);
+    }
+  }
+
+  function handleSubmit() {
+    setInputError(null);
+    
+    const videoId = extractYouTubeVideoId(inputValue);
+    if (!videoId) {
+      setInputError("INVALID YOUTUBE URL");
+      setInputValue("");
+      return;
+    }
+
+    // Check if this video is already in the user's archive
+    const alreadySaved = videos.some((v) => v.video_id === videoId);
+    if (alreadySaved) {
+      setInputError("ALREADY IN YOUR ARCHIVE");
+      setInputValue("");
+      return;
+    }
+    
+    fetchYouTubeData(videoId);
+  }
+
+  const addInputState = {
+    showInput,
+    inputValue,
+    inputError,
+    onToggle: toggleInput,
+    onChange: handleInputChange,
+    onSubmit: handleSubmit,
+  };
+
   return (
     <main className="flex flex-col items-center justify-center min-h-screen py-8 relative">
       {vinylItems.length === 0 && (
@@ -253,7 +407,10 @@ export default function PublicProfilePage() {
         activeVideoId={activeVideoId}
         onHomeClick={() => router.push("/")}
         onCloseActive={handleCloseActive}
-        showAddControl={false}
+        showAddControl={isOwnProfile}
+        addInputState={isOwnProfile ? addInputState : undefined}
+        onToggleAddInput={toggleInput}
+        addControlRef={addControlRef}
       />
     </main>
   );

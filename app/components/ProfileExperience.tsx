@@ -1,7 +1,7 @@
 "use client";
 
 import { IBM_Plex_Mono } from "next/font/google";
-import type { RefObject } from "react";
+import { useState, useEffect, type RefObject } from "react";
 import VinylStack3D, { VinylStackItem } from "./VinylStack3D";
 
 const ibmPlexMono = IBM_Plex_Mono({
@@ -61,9 +61,31 @@ export default function ProfileExperience({
   onHomeClick,
   addControlRef,
 }: ProfileExperienceProps) {
+  const [isClickLocked, setIsClickLocked] = useState(false);
+
   const handleShare = () => {
     onCopyProfileUrl?.();
   };
+
+  const handleButtonClick = () => {
+    setIsClickLocked(true);
+    onToggleAddInput?.();
+  };
+
+  const handleMouseLeave = () => {
+    if (!isClickLocked && addInputState?.showInput && onToggleAddInput) {
+      onToggleAddInput();
+    }
+    // Reset click lock when mouse leaves
+    setIsClickLocked(false);
+  };
+
+  // Reset click lock when input closes for any reason
+  useEffect(() => {
+    if (!addInputState?.showInput) {
+      setIsClickLocked(false);
+    }
+  }, [addInputState?.showInput]);
 
   return (
     <>
@@ -163,6 +185,7 @@ export default function ProfileExperience({
       {showAddControl && !activeVideoId && (
         <div
           ref={addControlRef}
+          onMouseLeave={handleMouseLeave}
           className="
             fixed bottom-6 right-6 z-50
             flex items-center
@@ -203,7 +226,12 @@ export default function ProfileExperience({
 
             <button
               type="button"
-              onClick={onToggleAddInput}
+              onClick={handleButtonClick}
+              onMouseEnter={() => {
+                if (!addInputState?.showInput && onToggleAddInput && !isClickLocked) {
+                  onToggleAddInput();
+                }
+              }}
               className="
                 absolute inset-0
                 flex items-center justify-center

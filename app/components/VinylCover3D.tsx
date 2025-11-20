@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useTexture, ContactShadows, Environment } from "@react-three/drei";
+import { useTexture, ContactShadows } from "@react-three/drei";
 import * as THREE from "three";
 import { Suspense, useMemo, useRef, useCallback, useState, useEffect } from "react";
 
@@ -266,8 +266,6 @@ export default function VinylCover3D({ src, width, size = 200, debug = false, co
         
         {/* Fill light - no shadows */}
         <directionalLight position={[-5, -3, 5]} intensity={0.45} />
-        
-        <Environment preset="studio" background={false} />
 
         <TiltedSleeve src={src} aspect={aspect} targetRotationRef={targetRotation} ease={EASE} targetZRef={targetZ} yOffset={FRAME_Y_OFFSET} />
         

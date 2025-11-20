@@ -13,11 +13,11 @@ CREATE TABLE public.videos (
 -- Add RLS (Row Level Security) policies
 ALTER TABLE public.videos ENABLE ROW LEVEL SECURITY;
 
--- Policy: Users can view their own videos
-CREATE POLICY "Users can view their own videos" 
+-- Policy: Videos are viewable by everyone (for public profiles)
+CREATE POLICY "Videos are viewable by everyone" 
   ON public.videos 
   FOR SELECT 
-  USING (auth.uid() = user_id);
+  USING (true);
 
 -- Policy: Users can insert their own videos
 CREATE POLICY "Users can insert their own videos" 

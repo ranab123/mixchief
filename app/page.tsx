@@ -295,6 +295,13 @@ export default function Home() {
 
   async function signIn() {
     const redirectUrl = getSiteUrl();
+    console.log("🔍 Sign in redirect URL:", redirectUrl);
+    console.log("🔍 Environment variables:", {
+      NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
+      NEXT_PUBLIC_VERCEL_URL: process.env.NEXT_PUBLIC_VERCEL_URL,
+      windowOrigin: typeof window !== "undefined" ? window.location.origin : "N/A"
+    });
+    
     await supabase.auth.signInWithOAuth({ 
       provider: "google",
       options: {

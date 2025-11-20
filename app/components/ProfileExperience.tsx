@@ -70,7 +70,7 @@ export default function ProfileExperience({
       <div
         className={`
           fixed top-8 left-8 text-left
-          transition-opacity duration-200
+          transition-opacity duration-1000
           ${activeVideoId ? "z-0 opacity-0 pointer-events-none" : "z-40 opacity-100"}
           ${ibmPlexMono.className}
         `}

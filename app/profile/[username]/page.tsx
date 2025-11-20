@@ -187,6 +187,15 @@ export default function PublicProfilePage() {
     duration: video.duration,
   }));
 
+  console.log("[PublicProfile] Rendering with:", {
+    username: profile.username,
+    videoCount: videos.length,
+    vinylItemsCount: vinylItems.length,
+    isOwnProfile,
+    hasVideos: vinylItems.length > 0,
+    firstVideo: vinylItems[0]
+  });
+
   function triggerPlayback(videoId: string, fadeIn: boolean) {
     const match = vinylItems.find((item) => item.videoId === videoId);
     playOrToggle(videoId, fadeIn, match?.src);
@@ -202,8 +211,32 @@ export default function PublicProfilePage() {
     setClearSelectionKey((k) => k + 1);
   }
 
+  async function handleDelete(item: VinylStackItem) {
+    if (!item.id) return;
+    try {
+      const { error } = await supabase.from("videos").delete().eq("id", item.id);
+      if (error) {
+        console.error("[PublicProfile] Error deleting video:", error);
+        alert("Failed to delete mix. Please try again.");
+        return;
+      }
+      // Remove from local state
+      setVideos((prev) => prev.filter((v) => v.id !== item.id));
+    } catch (err) {
+      console.error("[PublicProfile] Error deleting video:", err);
+      alert("Failed to delete mix. Please try again.");
+    }
+  }
+
   return (
     <main className="flex flex-col items-center justify-center min-h-screen py-8 relative">
+      {vinylItems.length === 0 && (
+        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-white/90 p-4 rounded-lg shadow-lg">
+          <p className="text-sm text-gray-600">
+            {profile.username} hasn't added any mixes yet.
+          </p>
+        </div>
+      )}
       <ProfileExperience
         shareCopied={shareCopied}
         onCopyProfileUrl={copyProfileUrl}
@@ -216,6 +249,7 @@ export default function PublicProfilePage() {
         onRequestPlay={handlePlayRequest}
         onRequestToggle={handleToggleRequest}
         onSeek={handleSeek}
+        onDelete={isOwnProfile ? handleDelete : undefined}
         activeVideoId={activeVideoId}
         onHomeClick={() => router.push("/")}
         onCloseActive={handleCloseActive}

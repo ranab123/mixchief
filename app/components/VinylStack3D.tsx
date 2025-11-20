@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
-import { Environment, ContactShadows, useTexture } from "@react-three/drei";
+import { ContactShadows, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
@@ -10,6 +10,7 @@ function Disc3D({
   tiltXRef,
   tiltYRef,
   onSeek,
+  wasSpinningRef,
 }: DiscSpinProps) {
   // Size of the plane in scene units; slightly larger to read bigger relative to text
   // with camera at z=6 and fov=45
@@ -30,12 +31,14 @@ function Disc3D({
   const draggingRef = useRef<boolean>(false);
   const prevDragAngleRef = useRef<number>(0);
   const accumulatedSpinRef = useRef<number>(0); // Track total spin during drag for seeking
+  // wasSpinningRef is now passed as a prop to communicate with parent
   const SPIN_DAMP = 0.985; // friction (higher = less friction)
   const DRAG_GAIN = 0.13;  // sensitivity of drag to imparted spin (lower = slower spin)
   const MAX_SPIN_VELOCITY = 0.3; // Maximum spin speed (radians/frame)
   const AUTO_SPIN_SPEED = -0.01; // constant slow spin when playing (radians/frame, negative for clockwise rotation)
   const MAX_SEEK_SECONDS = 75; // Maximum skip in seconds for a full rotation (more "bang" per full spin)
   const SEEK_THRESHOLD = Math.PI / 12; // Lower threshold (~15 degrees) before triggering seek so small spins count
+  const CLICK_THRESHOLD = Math.PI / 36; // Very small threshold (~5 degrees) to distinguish click from spin
   
   useFrame(() => {
     if (!meshRef.current) return;
@@ -77,6 +80,7 @@ function Disc3D({
         prevDragAngleRef.current = Math.atan2(localPoint.y, localPoint.x);
         draggingRef.current = true;
         accumulatedSpinRef.current = 0; // Reset accumulated spin at drag start
+        if (wasSpinningRef) wasSpinningRef.current = false; // Reset spinning flag
         // reduce spin when grabbing for better control
         spinVelRef.current *= 0.5;
       }}
@@ -100,6 +104,17 @@ function Disc3D({
         e.stopPropagation();
         draggingRef.current = false;
         
+        // Mark as spinning if there was meaningful movement (even below seek threshold)
+        if (Math.abs(accumulatedSpinRef.current) > CLICK_THRESHOLD) {
+          if (wasSpinningRef) {
+            wasSpinningRef.current = true;
+            // Reset after a short delay to allow clicks again
+            setTimeout(() => {
+              if (wasSpinningRef) wasSpinningRef.current = false;
+            }, 100);
+          }
+        }
+        
         // When drag ends, calculate seek amount based on accumulated spin
         if (onSeek && Math.abs(accumulatedSpinRef.current) > SEEK_THRESHOLD) {
           // Negative spin (clockwise, same as playback) = forward
@@ -111,6 +126,17 @@ function Disc3D({
         accumulatedSpinRef.current = 0;
       }}
       onPointerOut={() => {
+        // Mark as spinning if there was meaningful movement
+        if (Math.abs(accumulatedSpinRef.current) > CLICK_THRESHOLD) {
+          if (wasSpinningRef) {
+            wasSpinningRef.current = true;
+            // Reset after a short delay to allow clicks again
+            setTimeout(() => {
+              if (wasSpinningRef) wasSpinningRef.current = false;
+            }, 100);
+          }
+        }
+        
         if (draggingRef.current && onSeek && Math.abs(accumulatedSpinRef.current) > SEEK_THRESHOLD) {
           const deltaSeconds = -(accumulatedSpinRef.current / (2 * Math.PI)) * MAX_SEEK_SECONDS;
           onSeek(deltaSeconds);
@@ -192,6 +218,7 @@ interface DiscSpinProps {
   tiltXRef: React.MutableRefObject<number>;
   tiltYRef: React.MutableRefObject<number>;
   onSeek?: (deltaSeconds: number) => void;
+  wasSpinningRef?: React.MutableRefObject<boolean>;
 }
 
 interface VinylStack3DProps {
@@ -544,6 +571,7 @@ export default function VinylStack3D({
   const discTiltXTargetRef = useRef<number>(0); // normalized -1..1
   const discTiltYTargetRef = useRef<number>(0); // normalized -1..1
   const [discWidthPx, setDiscWidthPx] = useState<number | null>(null);
+  const discWasSpinningRef = useRef<boolean>(false); // Track if disc was spinning to prevent click
 
   // Track aspect ratios once images are loaded
   useEffect(() => {
@@ -752,7 +780,6 @@ export default function VinylStack3D({
           shadow-mapSize-height={2048}
         />
         <directionalLight position={[-5, -3, 5]} intensity={0.45} />
-        <Environment preset="studio" background={false} />
 
         <group>
           {items.map((item, i) => {
@@ -1020,6 +1047,10 @@ export default function VinylStack3D({
                     pointerEvents: "auto",
                   }}
                   onClick={() => {
+                    // Don't toggle if user was spinning the disc
+                    if (discWasSpinningRef.current) {
+                      return;
+                    }
                     const idx = selectedIndexRef.current;
                     const vid =
                       idx !== null && items[idx]?.videoId
@@ -1044,7 +1075,13 @@ export default function VinylStack3D({
                   }}
                 >
                   <ambientLight intensity={0.8} />
-                  <Disc3D isPlaying={isPlaying} tiltXRef={discTiltXTargetRef} tiltYRef={discTiltYTargetRef} onSeek={onSeek} />
+                  <Disc3D 
+                    isPlaying={isPlaying} 
+                    tiltXRef={discTiltXTargetRef} 
+                    tiltYRef={discTiltYTargetRef} 
+                    onSeek={onSeek} 
+                    wasSpinningRef={discWasSpinningRef}
+                  />
                 </Canvas>
                 {/* Video title, channel, and date below disc */}
                 {selectedIndex !== null && items[selectedIndex]?.title && (

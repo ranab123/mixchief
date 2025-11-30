@@ -32,7 +32,6 @@ export default function PublicProfilePage() {
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [videos, setVideos] = useState<VideoRow[]>([]);
-  const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,19 +95,6 @@ export default function PublicProfilePage() {
           setVideos(videosData || []);
         }
 
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        const own = user?.id === profileData.id;
-        console.log(
-          "[PublicProfile] isOwnProfile?",
-          own,
-          "viewerId=",
-          user?.id,
-          "profileId=",
-          profileData.id
-        );
-        setIsOwnProfile(own);
       } catch (err) {
         console.error("[PublicProfile] Error loading profile:", err);
         setError("Error loading profile");
@@ -141,11 +127,6 @@ export default function PublicProfilePage() {
       setShareCopied(false);
       shareCopiedTimeoutRef.current = null;
     }, 1000);
-  }
-
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    router.push("/");
   }
 
   if (loading) {
@@ -207,8 +188,7 @@ export default function PublicProfilePage() {
       <ProfileExperience
         shareCopied={shareCopied}
         onCopyProfileUrl={copyProfileUrl}
-        onSignOut={isOwnProfile ? handleSignOut : undefined}
-        showOwnerActions={isOwnProfile}
+        showOwnerActions={false}
         videos={vinylItems}
         isPlaying={isPlaying}
         currentTime={currentTime}

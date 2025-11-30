@@ -231,6 +231,7 @@ interface VinylStack3DProps {
   isPlaying?: boolean;
   currentTime?: number; // Current playback time in seconds
   clearSelectionKey?: number; // changes when parent wants to force-clear selection
+  externalSelectVideoId?: string | null; // videoId to select externally (e.g., from list view)
   width?: number;
   containerAspect?: number;
   yRotationDeg?: number;    // yaw (around Y)
@@ -458,6 +459,7 @@ export default function VinylStack3D({
   isPlaying = false,
   currentTime = 0,
   clearSelectionKey = 0,
+  externalSelectVideoId = null,
   width,
   containerAspect = 16 / 9,
   yRotationDeg = DEFAULT_COVER_ROTATION.yawDeg,
@@ -567,6 +569,40 @@ export default function VinylStack3D({
     discStartArmedRef.current = false;
     setShowDisc(false);
   }, [clearSelectionKey, items.length]);
+  
+  // Handle external selection (e.g., from list view)
+  useEffect(() => {
+    if (externalSelectVideoId) {
+      const index = items.findIndex(item => item.videoId === externalSelectVideoId);
+      if (index !== -1 && selectedIndex !== index) {
+        setSelectedIndex(index);
+        // Trigger overlay animation
+        deselectionTimeRef.current = null;
+        overlayTimerRef.current = window.setTimeout(() => {
+          overlayTargetRef.current = 1;
+        }, 2000);
+        // Start playback
+        if (typeof onRequestPlay === "function") {
+          setTimeout(() => {
+            onRequestPlay(externalSelectVideoId);
+          }, 0);
+        }
+        // Set face targets
+        const faceArr = faceTargetsRef.current.slice();
+        for (let j = 0; j < faceArr.length; j++) {
+          faceArr[j] = j === index ? 1 : 0;
+        }
+        faceTargetsRef.current = faceArr;
+        // Set fade targets
+        const fadeArr = fadeTargetsRef.current.slice();
+        for (let j = 0; j < fadeArr.length; j++) {
+          fadeArr[j] = j === index ? 1 : 0;
+        }
+        fadeTargetsRef.current = fadeArr;
+      }
+    }
+  }, [externalSelectVideoId, items, selectedIndex, onRequestPlay]);
+  
   const discStartArmedRef = useRef<boolean>(false);
   const discTiltXTargetRef = useRef<number>(0); // normalized -1..1
   const discTiltYTargetRef = useRef<number>(0); // normalized -1..1

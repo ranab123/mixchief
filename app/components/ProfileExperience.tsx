@@ -1,7 +1,7 @@
 "use client";
 
 import { IBM_Plex_Mono } from "next/font/google";
-import { useState, useEffect, type RefObject } from "react";
+import { useState, useEffect, useRef, useCallback, type RefObject } from "react";
 import VinylStack3D, { VinylStackItem } from "./VinylStack3D";
 
 const ibmPlexMono = IBM_Plex_Mono({
@@ -62,12 +62,38 @@ export default function ProfileExperience({
   addControlRef,
 }: ProfileExperienceProps) {
   const [isClickLocked, setIsClickLocked] = useState(false);
+  const [requireMouseLeave, setRequireMouseLeave] = useState(false);
+  const [isListView, setIsListView] = useState(false);
+  const [externalSelectVideoId, setExternalSelectVideoId] = useState<string | null>(null);
+  const prevActiveVideoRef = useRef<string | null | undefined>(activeVideoId);
+
+  const requireMouseLeaveAfterClose = useCallback(() => {
+    setRequireMouseLeave(true);
+  }, []);
+
+  useEffect(() => {
+    const prevActiveVideoId = prevActiveVideoRef.current;
+    if (prevActiveVideoId && !activeVideoId) {
+      requireMouseLeaveAfterClose();
+      // Clear external selection when video stops
+      setExternalSelectVideoId(null);
+    }
+    prevActiveVideoRef.current = activeVideoId ?? null;
+  }, [activeVideoId, requireMouseLeaveAfterClose]);
 
   const handleShare = () => {
     onCopyProfileUrl?.();
   };
 
+  const toggleListView = () => {
+    setIsListView(!isListView);
+  };
+
   const handleButtonClick = () => {
+    const isTemporarilyDisabled = requireMouseLeave && !addInputState?.showInput;
+    if (isTemporarilyDisabled) {
+      return;
+    }
     setIsClickLocked(true);
     onToggleAddInput?.();
   };
@@ -78,6 +104,19 @@ export default function ProfileExperience({
     }
     // Reset click lock when mouse leaves
     setIsClickLocked(false);
+    if (requireMouseLeave) {
+      setRequireMouseLeave(false);
+    }
+  };
+
+  const handleMouseEnter = () => {
+    const isTemporarilyDisabled = requireMouseLeave && !addInputState?.showInput;
+    if (isTemporarilyDisabled) {
+      return;
+    }
+    if (!addInputState?.showInput && onToggleAddInput && !isClickLocked) {
+      onToggleAddInput();
+    }
   };
 
   // Reset click lock when input closes for any reason
@@ -125,20 +164,65 @@ export default function ProfileExperience({
               </button>
             </>
           )}
-          {showOwnerActions && onSignOut && (
-            <button
-              type="button"
-              onClick={onSignOut}
-              className="text-gray-500 hover:text-black transition-colors text-left"
-            >
-              SIGN OUT
-            </button>
+          {showOwnerActions && (
+            <>
+              <button
+                type="button"
+                onClick={toggleListView}
+                className="text-gray-500 hover:text-black transition-colors text-left"
+              >
+                {isListView ? "3D VIEW" : "LIST VIEW"}
+              </button>
+              {onCopyProfileUrl && (
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  className="text-gray-500 hover:text-black transition-colors text-left"
+                >
+                  {shareCopied ? "PROFILE LINK COPIED" : "COPY PROFILE LINK"}
+                </button>
+              )}
+              {onSignOut && (
+                <button
+                  type="button"
+                  onClick={onSignOut}
+                  className="text-gray-500 hover:text-black transition-colors text-left"
+                >
+                  SIGN OUT
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
 
+      {/* List view - shown when isListView is true and no video is playing */}
+      {isListView && (
+        <div className={`fixed top-8 left-[35vw] right-8 transition-opacity duration-1000 ${activeVideoId ? "z-0 opacity-0 pointer-events-none" : "z-40 opacity-100"} ${ibmPlexMono.className}`}>
+          <div>
+            {videos.map((video, index) => (
+              <div
+                key={video.id || index}
+                className="flex justify-between items-center py-3 border-b border-gray-300 last:border-b-0 cursor-pointer hover:bg-gray-50 transition-colors"
+                onClick={() => {
+                  setExternalSelectVideoId(video.videoId);
+                }}
+              >
+                <div className="text-left text-sm font-medium tracking-wide uppercase flex-1 pr-4">
+                  {video.title}
+                </div>
+                <div className="text-right text-sm font-medium tracking-wide uppercase text-gray-600">
+                  {video.channelTitle}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* VinylStack3D - always rendered, but hidden when in list view and no video is playing */}
       <div className="flex flex-col items-center">
-        <div className="mt-8 w-full lg:w-screen self-stretch max-w-none overflow-visible px-4 md:px-6 lg:px-10 xl:px-16">
+        <div className={`mt-8 w-full lg:w-screen self-stretch max-w-none overflow-visible px-4 md:px-6 lg:px-10 xl:px-16 ${isListView && !activeVideoId ? 'opacity-0 pointer-events-none' : ''}`}>
           <VinylStack3D
             items={videos}
             onRequestPlay={onRequestPlay}
@@ -148,6 +232,7 @@ export default function ProfileExperience({
             currentTime={currentTime}
             clearSelectionKey={clearSelectionKey}
             onDelete={onDelete}
+            externalSelectVideoId={externalSelectVideoId}
           />
         </div>
       </div>
@@ -157,7 +242,10 @@ export default function ProfileExperience({
         <div className="fixed bottom-6 right-6 z-50 flex items-center h-20 w-20">
           <button
             type="button"
-            onClick={() => onCloseActive?.()}
+            onClick={() => {
+              requireMouseLeaveAfterClose();
+              onCloseActive?.();
+            }}
             className="
               absolute inset-0
               flex items-center justify-center
@@ -231,11 +319,7 @@ export default function ProfileExperience({
             <button
               type="button"
               onClick={handleButtonClick}
-              onMouseEnter={() => {
-                if (!addInputState?.showInput && onToggleAddInput && !isClickLocked) {
-                  onToggleAddInput();
-                }
-              }}
+              onMouseEnter={handleMouseEnter}
               className="
                 absolute inset-0
                 flex items-center justify-center

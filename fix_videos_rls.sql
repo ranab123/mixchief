@@ -16,3 +16,5 @@ CREATE POLICY "Videos are viewable by everyone"
 -- - "Users can update their own videos"
 -- - "Users can delete their own videos"
 
+
+

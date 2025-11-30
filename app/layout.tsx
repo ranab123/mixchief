@@ -21,7 +21,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "mixchief",
+  title: "mixchief ;)",
   description: "DJ Music Library",
   icons: {
     icon: [

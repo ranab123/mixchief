@@ -123,7 +123,7 @@ export default function Home() {
         </div>
       ) : !profile ? (
         <div className="mt-8">
-          <UsernameSetup userId={user.id} userEmail={user.email} onComplete={handleUsernameSetup} />
+          <UsernameSetup userId={user.id} userEmail={user.email || ""} onComplete={handleUsernameSetup} />
         </div>
       ) : (
         <div className="mt-8 text-sm text-gray-500 uppercase tracking-[0.18em]">

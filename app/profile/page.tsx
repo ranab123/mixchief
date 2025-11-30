@@ -367,10 +367,9 @@ export default function ProfilePage() {
     return (
       <main className="flex flex-col items-center justify-center min-h-screen py-8 relative">
         <div className="mt-8">
-          {/* Ensure user.id and user.email are strings */}
           <UsernameSetup
-            userId={String(user.id)}
-            userEmail={String(user.email)}
+            userId={user.id}
+            userEmail={user.email || ""}
             onComplete={handleUsernameSetup}
           />
         </div>

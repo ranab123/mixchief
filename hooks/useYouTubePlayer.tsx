@@ -29,6 +29,24 @@ export function YouTubePlayerProvider({ children }: { children: ReactNode }) {
     | null
   >(null);
 
+  // Suppress postMessage errors from YouTube iframe
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    const originalError = console.error;
+    console.error = (...args: any[]) => {
+      // Filter out YouTube postMessage origin errors
+      if (args[0]?.toString().includes("postMessage") || args[0]?.toString().includes("target origin")) {
+        return;
+      }
+      originalError.apply(console, args);
+    };
+
+    return () => {
+      console.error = originalError;
+    };
+  }, []);
+
   // Ensure the hidden container exists exactly once in the DOM
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -59,6 +77,9 @@ export function YouTubePlayerProvider({ children }: { children: ReactNode }) {
     function instantiate() {
       apiReadyRef.current = true;
       if (!playerRef.current) {
+        // Get the current origin for proper iframe communication
+        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '*';
+        
         playerRef.current = new w.YT.Player("hidden-yt-player", {
           width: "1",
           height: "1",
@@ -70,6 +91,7 @@ export function YouTubePlayerProvider({ children }: { children: ReactNode }) {
             fs: 0,
             iv_load_policy: 3,
             playsinline: 1,
+            origin: currentOrigin, // Specify origin to prevent postMessage errors
           },
           events: {
             onStateChange: (e: any) => {

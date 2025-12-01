@@ -297,20 +297,10 @@ function CoverPlane({
   scale?: number;
   thickness?: number;
 }) {
-  const componentId = useRef(`CoverPlane-${src.split('/').pop()}-${Math.random().toString(36).substr(2, 9)}`);
-  
-  useEffect(() => {
-    console.log(`[${componentId.current}] MOUNTED`);
-    return () => {
-      console.log(`[${componentId.current}] UNMOUNTED`);
-    };
-  }, []);
-  
   const texture = useTexture(src);
 
   useMemo(() => {
     if (texture) {
-      console.log(`[${componentId.current}] Configuring main texture`);
       texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.anisotropy = 8;
@@ -325,7 +315,6 @@ function CoverPlane({
   }, [texture]);
 
   const boxGeomForEdges = useMemo(() => {
-    console.log(`[${componentId.current}] Creating BoxGeometry`);
     return new THREE.BoxGeometry(aspect, 1, thickness);
   }, [aspect, thickness]);
   
@@ -333,19 +322,15 @@ function CoverPlane({
   useEffect(() => {
     return () => {
       if (boxGeomForEdges) {
-        console.log(`[${componentId.current}] Disposing BoxGeometry`);
         boxGeomForEdges.dispose();
       }
     };
   }, [boxGeomForEdges]);
   
   const materials = useMemo(() => {
-    console.log(`[${componentId.current}] Creating materials (texture present: ${!!texture})`);
-    let textureCloneCount = 0;
     
     // Safety: if no texture yet, fallback to neutral sides
     const makeSideMaterial = (map?: THREE.Texture) => {
-      console.log(`[${componentId.current}] Creating MeshStandardMaterial (has map: ${!!map})`);
       return new THREE.MeshStandardMaterial({
         map,
         roughness: 0.32,
@@ -356,10 +341,8 @@ function CoverPlane({
     // Front face material with inner-border alpha + blur gradient
     const front = (() => {
       if (!texture) {
-        console.log(`[${componentId.current}] Creating fallback MeshBasicMaterial`);
         return new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.9 });
       }
-      console.log(`[${componentId.current}] Creating ShaderMaterial for front face`);
       const uniforms = {
         uMap: { value: texture as any },
         uPadding: { value: 0.15 },   // 15% padding band
@@ -443,7 +426,6 @@ function CoverPlane({
     })();
 
     if (!texture) {
-      console.log(`[${componentId.current}] No texture - returning fallback materials array`);
       return [
         makeSideMaterial(), // right
         makeSideMaterial(), // left
@@ -458,8 +440,6 @@ function CoverPlane({
     const edge = 0.02; // 2% strip to approximate edge/average color
     const mkClone = (ox: number, oy: number, rx: number, ry: number) => {
       const t = texture.clone();
-      textureCloneCount++;
-      console.log(`[${componentId.current}] Cloning texture #${textureCloneCount}`);
       t.needsUpdate = true;
       t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
       t.offset.set(ox, oy);
@@ -475,8 +455,6 @@ function CoverPlane({
     const topTex = mkClone(0, 1 - edge, 1, edge);
     // Bottom side samples a thin row near y=0
     const bottomTex = mkClone(0, 0, 1, edge);
-
-    console.log(`[${componentId.current}] Created ${textureCloneCount} texture clones total`);
     
     // Box material order: [px, nx, py, ny, pz, nz]
     return [
@@ -492,17 +470,14 @@ function CoverPlane({
   // Cleanup materials and textures on unmount or when deps change
   useEffect(() => {
     return () => {
-      console.log(`[${componentId.current}] Cleaning up materials array`);
       if (Array.isArray(materials)) {
         materials.forEach((mat, idx) => {
           if (mat) {
             // Dispose of textures used by the material
             if ('map' in mat && mat.map) {
-              console.log(`[${componentId.current}] Disposing texture from material[${idx}]`);
               mat.map.dispose();
             }
             // Dispose of the material itself
-            console.log(`[${componentId.current}] Disposing material[${idx}]`);
             mat.dispose();
           }
         });
@@ -560,10 +535,6 @@ export default function VinylStack3D({
   showShadows = true,
   showBorders = false,
 }: VinylStack3DProps) {
-  const renderCountRef = useRef(0);
-  renderCountRef.current++;
-  console.log(`[VinylStack3D] RENDER #${renderCountRef.current} - items count: ${items.length}`);
-  
   const containerRef = useRef<HTMLDivElement | null>(null);
   
   // Setup non-passive wheel event listener to allow preventDefault
@@ -577,17 +548,14 @@ export default function VinylStack3D({
       const sensitivity = 0.0018; // adjust scroll speed
       // Reverse scroll direction: scroll down increases progress toward 1 (or vice versa)
       const next = Math.min(1, Math.max(0, tTargetRef.current - e.deltaY * sensitivity));
-      console.log(`[VinylStack3D] Scroll event - deltaY: ${e.deltaY}, t: ${tTargetRef.current.toFixed(3)} → ${next.toFixed(3)}`);
       tTargetRef.current = next;
     };
     
     // Add with passive: false to allow preventDefault
     container.addEventListener('wheel', handleWheel, { passive: false });
-    console.log('[VinylStack3D] Added non-passive wheel listener');
     
     return () => {
       container.removeEventListener('wheel', handleWheel);
-      console.log('[VinylStack3D] Removed wheel listener');
     };
   }, []);
   const [fov] = useState<number>(DEFAULT_CAMERA_FOV);
@@ -788,19 +756,12 @@ export default function VinylStack3D({
     overlayAlphaRef.current = overlayAlpha;
   }, [overlayAlpha]);
   useEffect(() => {
-    let lastLogTime = 0;
     function step() {
       const cur = tRef.current;
       const target = tTargetRef.current;
       const next = cur + (target - cur) * 0.12;
       if (Math.abs(next - cur) > 0.0005) {
         setT(next);
-        // Log only occasionally (every 500ms) to avoid console spam
-        const now = performance.now();
-        if (now - lastLogTime > 500) {
-          console.log(`[VinylStack3D] RAF: t animation ${cur.toFixed(3)} → ${next.toFixed(3)}`);
-          lastLogTime = now;
-        }
       }
       // per-item hover easing
       const hp = hoverProgressesRef.current;
@@ -816,12 +777,6 @@ export default function VinylStack3D({
           if (Math.abs(nv - v) > 0.0005) changed = true;
         }
         if (changed) {
-          // Log hover state changes occasionally
-          const now = performance.now();
-          if (now - lastLogTime > 500) {
-            console.log(`[VinylStack3D] RAF: Hover progresses updated`);
-            lastLogTime = now;
-          }
           setHoverProgresses(nextArr);
         }
       }
@@ -951,11 +906,9 @@ export default function VinylStack3D({
             // Hide other items only while one is actively selected.
             // When selection is cleared, show the full stack immediately again.
             if (selectedIndex !== null && selectedIndex !== i) {
-              console.log(`[VinylStack3D] Skipping render for item ${i} (${item.title || item.videoId}) - selected=${selectedIndex}`);
               return null;
             }
 
-            console.log(`[VinylStack3D] Rendering item ${i} (${item.title || item.videoId})`);
             const aspect = aspects[i] ?? 1;
             const s = i - t * k;
             const sOut = s; // keep conveyor position unchanged for hover
@@ -1200,11 +1153,11 @@ export default function VinylStack3D({
         >
           {(() => {
             // Keep the disc comfortably sized; default to 360px if measurement is unavailable/small
-            // On mobile (width < 768px), use full screen width (or even slightly larger)
+            // On mobile (width < 768px), use full screen width, but 25% smaller
             const measured = discWidthPx ? Math.round(discWidthPx) : 0;
             const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
             const discPx = isMobile 
-              ? window.innerWidth // full screen width, no constraints
+              ? window.innerWidth * 0.75 // full screen width but 25% smaller
               : Math.max(480, measured);
             return (
               <>
@@ -1273,9 +1226,9 @@ export default function VinylStack3D({
                         gap: "12px",
                         width: "100%",
                         fontFamily: "IBM Plex Mono, monospace",
-                        fontSize: isMobile ? "20px" : "18px",
+                        fontSize: isMobile ? "15px" : "18px",
                         fontWeight: "bold",
-                        letterSpacing: isMobile ? "2px" : "2px",
+                        letterSpacing: isMobile ? "1.5px" : "2px",
                         color: "#000000",
                         marginBottom: "12px",
                       }}
@@ -1340,9 +1293,9 @@ export default function VinylStack3D({
                       style={{
                         display: "block",
                         fontFamily: "IBM Plex Mono, monospace",
-                        fontSize: isMobile ? "20px" : "18px",
+                        fontSize: isMobile ? "15px" : "18px",
                         fontWeight: "bold",
-                        letterSpacing: isMobile ? "2px" : "2px",
+                        letterSpacing: isMobile ? "1.5px" : "2px",
                         color: "#000000",
                         textAlign: "justify",
                         wordWrap: "break-word",
@@ -1370,9 +1323,9 @@ export default function VinylStack3D({
                         gap: "12px",
                         width: "100%",
                         fontFamily: "IBM Plex Mono, monospace",
-                        fontSize: isMobile ? "20px" : "18px",
+                        fontSize: isMobile ? "15px" : "18px",
                         fontWeight: "bold",
-                        letterSpacing: isMobile ? "2px" : "2px",
+                        letterSpacing: isMobile ? "1.5px" : "2px",
                         color: "#000000",
                       }}
                     >

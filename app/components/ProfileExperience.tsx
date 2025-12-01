@@ -251,16 +251,16 @@ export default function ProfileExperience({
         className={`
           fixed bottom-6 left-6 z-50
           flex flex-col justify-center items-center
-          w-20 h-20
+          w-15 h-15
           transition-opacity duration-1000
           ${activeVideoId ? "opacity-0 pointer-events-none" : "opacity-100"}
           md:hidden
         `}
         aria-label="Toggle menu"
       >
-        <span className="w-14 h-[10px] bg-black mb-2" />
-        <span className="w-14 h-[10px] bg-black mb-2" />
-        <span className="w-14 h-[10px] bg-black" />
+        <span className="w-10 h-[7.5px] bg-black mb-1.5" />
+        <span className="w-10 h-[7.5px] bg-black mb-1.5" />
+        <span className="w-10 h-[7.5px] bg-black" />
       </button>
 
       {/* Mobile Menu Panel */}
@@ -392,7 +392,7 @@ export default function ProfileExperience({
 
       {/* Close button - always visible when there's an active video */}
       {activeVideoId && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center h-20 w-20">
+        <div className="fixed bottom-6 right-6 z-50 flex items-center h-15 w-15 md:h-20 md:w-20">
           <button
             type="button"
             onClick={() => {
@@ -408,17 +408,17 @@ export default function ProfileExperience({
             "
             aria-label="Close player"
           >
-            <span className="relative block h-14 w-14 transition-transform duration-200 rotate-45">
+            <span className="relative block h-10 w-10 md:h-14 md:w-14 transition-transform duration-200 rotate-45">
               <span
                 className="
                   absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
-                  h-14 w-[10px] bg-black
+                  h-10 w-[7.5px] md:h-14 md:w-[10px] bg-black
                 "
               />
               <span
                 className="
                   absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
-                  w-14 h-[10px] bg-black
+                  w-10 h-[7.5px] md:w-14 md:h-[10px] bg-black
                 "
               />
             </span>
@@ -434,7 +434,7 @@ export default function ProfileExperience({
           className="
             fixed bottom-6 right-6 z-50
             flex items-center
-            h-20 w-20
+            h-15 w-15 md:h-20 md:w-20
           "
         >
           <div className="relative h-full w-full">
@@ -442,8 +442,8 @@ export default function ProfileExperience({
               <div
                 className={`
                   absolute top-1/2 -translate-y-1/2
-                  h-14 w-[320px] bg-black text-white
-                  flex items-center px-4 gap-3
+                  h-10 md:h-14 w-[240px] md:w-[320px] bg-black text-white
+                  flex items-center px-3 md:px-4 gap-2 md:gap-3
                   text-xs tracking-[0.18em]
                   ${ibmPlexMono.className}
                   z-30
@@ -482,17 +482,17 @@ export default function ProfileExperience({
               "
               aria-label="Add mix"
             >
-              <span className="relative block h-14 w-14 transition-transform duration-200">
+              <span className="relative block h-10 w-10 md:h-14 md:w-14 transition-transform duration-200">
                 <span
                   className="
                     absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
-                    h-14 w-[10px] bg-black
+                    h-10 w-[7.5px] md:h-14 md:w-[10px] bg-black
                   "
                 />
                 <span
                   className="
                     absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
-                    w-14 h-[10px] bg-black
+                    w-10 h-[7.5px] md:w-14 md:h-[10px] bg-black
                   "
                 />
               </span>

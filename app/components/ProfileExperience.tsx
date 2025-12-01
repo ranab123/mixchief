@@ -38,6 +38,8 @@ export interface ProfileExperienceProps {
   onCloseActive?: () => void;
   onHomeClick?: () => void;
   addControlRef?: RefObject<HTMLDivElement | null>;
+  profileUsername?: string;
+  totalDurationHours?: string;
 }
 
 export default function ProfileExperience({
@@ -60,12 +62,15 @@ export default function ProfileExperience({
   onCloseActive,
   onHomeClick,
   addControlRef,
+  profileUsername,
+  totalDurationHours,
 }: ProfileExperienceProps) {
   const [isClickLocked, setIsClickLocked] = useState(false);
   const [requireMouseLeave, setRequireMouseLeave] = useState(false);
   const [isListView, setIsListView] = useState(false);
   const [externalSelectVideoId, setExternalSelectVideoId] = useState<string | null>(null);
   const prevActiveVideoRef = useRef<string | null | undefined>(activeVideoId);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const requireMouseLeaveAfterClose = useCallback(() => {
     setRequireMouseLeave(true);
@@ -87,6 +92,40 @@ export default function ProfileExperience({
 
   const toggleListView = () => {
     setIsListView(!isListView);
+  };
+
+  const handleFeelingLucky = () => {
+    if (videos.length === 0) return;
+    const randomIndex = Math.floor(Math.random() * videos.length);
+    const randomVideo = videos[randomIndex];
+    if (randomVideo) {
+      // Trigger the vinyl selection animation
+      setExternalSelectVideoId(randomVideo.videoId);
+    }
+  };
+
+  // Calculate total duration in hours
+  const calculateTotalDuration = () => {
+    if (!videos.length) return "0";
+    
+    // Parse ISO 8601 duration format (e.g., "PT1H30M45S")
+    const totalSeconds = videos.reduce((sum, video) => {
+      const duration = video.duration;
+      if (!duration) return sum;
+      
+      // Parse PT1H30M45S format
+      const matches = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+      if (!matches) return sum;
+      
+      const hours = parseInt(matches[1] || "0");
+      const minutes = parseInt(matches[2] || "0");
+      const seconds = parseInt(matches[3] || "0");
+      
+      return sum + (hours * 3600 + minutes * 60 + seconds);
+    }, 0);
+    
+    const totalHours = (totalSeconds / 3600).toFixed(1);
+    return totalHours;
   };
 
   const handleButtonClick = () => {
@@ -128,90 +167,180 @@ export default function ProfileExperience({
 
   return (
     <>
+      {/* Header - Left aligned for all screen sizes */}
       <div
         className={`
-          fixed top-8 left-8 text-left
+          fixed top-8 left-4 md:left-8 text-left
+          w-[80%] md:w-auto
           transition-opacity duration-1000
           ${activeVideoId ? "z-0 opacity-0 pointer-events-none" : "z-40 opacity-100"}
           ${ibmPlexMono.className}
         `}
       >
         <div className="inline-block">
-          <h1 className="text-6xl font-normal tracking-normal text-black">
-            MIXCHIEF
-          </h1>
-          <p className="mt-12 text-sm font-bold leading-relaxed text-black text-justify max-w-68">
-            A SPACE TO SAVE YOUR FAVORITE MIXES FROM ACROSS THE INTERNET IN ONE HOME.
-          </p>
+          {!showOwnerActions ? (
+            <button
+              type="button"
+              onClick={onHomeClick}
+              className="text-6xl md:text-6xl font-normal tracking-normal text-black md:hover:text-gray-500 cursor-pointer"
+            >
+              MIXCHIEF
+            </button>
+          ) : (
+            <h1 className="text-6xl md:text-6xl font-normal tracking-normal text-black">
+              MIXCHIEF
+            </h1>
+          )}
         </div>
 
-        <div className="mt-12 flex flex-col gap-1 text-sm font-bold tracking-[0.18em]">
-          {!showOwnerActions && (
-            <>
-              <button
-                type="button"
-                className="text-gray-500 hover:text-black transition-colors text-left"
-                onClick={onHomeClick}
-              >
-                HOME
-              </button>
-              <button
-                type="button"
-                onClick={handleShare}
-                className="text-gray-500 hover:text-black transition-colors text-left"
-              >
-                {shareCopied ? "PROFILE LINK COPIED" : "SHARE PROFILE"}
-              </button>
-            </>
+        <div className="mt-6 text-black text-sm md:text-sm font-bold tracking-[0.18em]">
+          <div className="flex justify-between uppercase">
+            <div>
+              {showOwnerActions ? "YOUR MIXES:" : profileUsername ? `${profileUsername}'S MIXES:` : "MIXES:"}
+            </div>
+            <div>{videos.length} TRACKS</div>
+          </div>
+          <div className="flex justify-between uppercase">
+            <div>TOTAL DURATION:</div>
+            <div>{totalDurationHours || calculateTotalDuration()} HOURS</div>
+          </div>
+          <button 
+            type="button"
+            onClick={handleFeelingLucky}
+            className="uppercase mt-1 text-right cursor-pointer md:hover:text-gray-500 w-full" 
+            style={{ transform: 'rotate(180deg)' }}
+          >
+            FEELING LUCKY?
+          </button>
+        </div>
+
+        {/* Desktop menu - hidden on mobile */}
+        <div className="mt-6 flex-col gap-1 text-sm font-bold tracking-[0.18em] hidden md:flex">
+          <button
+            type="button"
+            onClick={toggleListView}
+            className="text-gray-500 hover:text-black transition-colors text-left"
+          >
+            // {isListView ? "3D VIEW" : "LIST VIEW"}
+          </button>
+          {onCopyProfileUrl && (
+            <button
+              type="button"
+              onClick={handleShare}
+              className="text-gray-500 hover:text-black transition-colors text-left"
+            >
+              // {shareCopied ? "PROFILE LINK COPIED" : "COPY PROFILE LINK"}
+            </button>
           )}
-          {showOwnerActions && (
-            <>
-              <button
-                type="button"
-                onClick={toggleListView}
-                className="text-gray-500 hover:text-black transition-colors text-left"
-              >
-                {isListView ? "3D VIEW" : "LIST VIEW"}
-              </button>
-              {onCopyProfileUrl && (
-                <button
-                  type="button"
-                  onClick={handleShare}
-                  className="text-gray-500 hover:text-black transition-colors text-left"
-                >
-                  {shareCopied ? "PROFILE LINK COPIED" : "COPY PROFILE LINK"}
-                </button>
-              )}
-              {onSignOut && (
-                <button
-                  type="button"
-                  onClick={onSignOut}
-                  className="text-gray-500 hover:text-black transition-colors text-left"
-                >
-                  SIGN OUT
-                </button>
-              )}
-            </>
+          {onSignOut && (
+            <button
+              type="button"
+              onClick={onSignOut}
+              className="text-gray-500 hover:text-black transition-colors text-left"
+            >
+              // SIGN OUT
+            </button>
           )}
         </div>
       </div>
 
+      {/* Mobile Menu Button - Bottom Left */}
+      <button
+        type="button"
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        className={`
+          fixed bottom-6 left-6 z-50
+          flex flex-col justify-center items-center
+          w-20 h-20
+          transition-opacity duration-1000
+          ${activeVideoId ? "opacity-0 pointer-events-none" : "opacity-100"}
+          md:hidden
+        `}
+        aria-label="Toggle menu"
+      >
+        <span className="w-14 h-[10px] bg-black mb-2" />
+        <span className="w-14 h-[10px] bg-black mb-2" />
+        <span className="w-14 h-[10px] bg-black" />
+      </button>
+
+      {/* Mobile Menu Panel */}
+      {isMobileMenuOpen && (
+        <div
+          className={`
+            fixed bottom-24 left-6 z-50
+            bg-black text-white
+            p-4
+            transition-opacity duration-300
+            ${activeVideoId ? "opacity-0 pointer-events-none" : "opacity-100"}
+            md:hidden
+            ${ibmPlexMono.className}
+          `}
+        >
+          <div className="flex flex-col gap-3 text-xs font-bold tracking-[0.18em]">
+            <button
+              type="button"
+              onClick={() => {
+                toggleListView();
+                setIsMobileMenuOpen(false);
+              }}
+              className="text-white transition-colors text-left"
+            >
+              // {isListView ? "3D VIEW" : "LIST VIEW"}
+            </button>
+            {onCopyProfileUrl && (
+              <button
+                type="button"
+                onClick={() => {
+                  handleShare();
+                  setIsMobileMenuOpen(false);
+                }}
+                className="text-white transition-colors text-left"
+              >
+                // {shareCopied ? "PROFILE LINK COPIED" : "COPY PROFILE LINK"}
+              </button>
+            )}
+            {onSignOut && (
+              <button
+                type="button"
+                onClick={() => {
+                  onSignOut();
+                  setIsMobileMenuOpen(false);
+                }}
+                className="text-white transition-colors text-left"
+              >
+                // SIGN OUT
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      
+
       {/* List view - shown when isListView is true and no video is playing */}
       {isListView && (
-        <div className={`fixed top-8 left-[35vw] right-8 transition-opacity duration-1000 ${activeVideoId ? "z-0 opacity-0 pointer-events-none" : "z-40 opacity-100"} ${ibmPlexMono.className}`}>
+        <div className={`
+          fixed 
+          md:top-8 md:left-[35vw] md:right-8 md:max-h-[calc(100vh-4rem)]
+          top-[280px] left-4 right-4 max-h-[calc(100vh-320px)]
+          transition-opacity duration-1000 
+          ${activeVideoId ? "z-0 opacity-0 pointer-events-none" : "z-40 opacity-100"} 
+          ${ibmPlexMono.className}
+          overflow-y-auto
+        `}>
           <div>
             {videos.map((video, index) => (
               <div
                 key={video.id || index}
-                className="flex justify-between items-center py-3 border-b border-gray-300 last:border-b-0 cursor-pointer hover:bg-gray-50 transition-colors"
+                className="flex flex-col md:flex-row md:justify-between items-start md:items-center py-3 border-b border-gray-300 last:border-b-0 cursor-pointer md:hover:bg-gray-50 transition-colors"
                 onClick={() => {
                   setExternalSelectVideoId(video.videoId);
+                  setIsMobileMenuOpen(false);
                 }}
               >
-                <div className="text-left text-sm font-medium tracking-wide uppercase flex-1 pr-4">
+                <div className="text-left text-xs md:text-sm font-medium tracking-wide uppercase flex-1 pr-4 mb-1 md:mb-0">
                   {video.title}
                 </div>
-                <div className="text-right text-sm font-medium tracking-wide uppercase text-gray-600">
+                <div className="text-left md:text-right text-xs md:text-sm font-medium tracking-wide uppercase text-gray-600">
                   {video.channelTitle}
                 </div>
               </div>
@@ -220,9 +349,33 @@ export default function ProfileExperience({
         </div>
       )}
 
+      {/* Empty state - shown when there are no videos */}
+      {videos.length === 0 && !activeVideoId && (
+        <div className="fixed inset-0 flex items-center justify-center z-30">
+          <div className="relative">
+            {/* Vinyl-shaped rectangle with dotted border */}
+            <div 
+              className="w-[400px] h-[300px] bg-transparent border-2 border-black"
+              style={{
+                borderStyle: 'dashed',
+                borderWidth: '2px',
+                borderRadius: '50%',
+              }}
+            >
+              {/* Center text */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <p className={`text-black text-sm font-bold tracking-[0.18em] uppercase ${ibmPlexMono.className}`}>
+                  ADD YOUR FIRST MIX
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* VinylStack3D - always rendered, but hidden when in list view and no video is playing */}
       <div className="flex flex-col items-center">
-        <div className={`mt-8 w-full lg:w-screen self-stretch max-w-none overflow-visible px-4 md:px-6 lg:px-10 xl:px-16 ${isListView && !activeVideoId ? 'opacity-0 pointer-events-none' : ''}`}>
+        <div className={`mt-8 w-full lg:w-screen self-stretch max-w-none overflow-visible px-4 md:px-6 lg:px-10 xl:px-16 ${isListView && !activeVideoId ? 'opacity-0 pointer-events-none' : ''} ${videos.length === 0 ? 'opacity-0 pointer-events-none' : ''}`}>
           <VinylStack3D
             items={videos}
             onRequestPlay={onRequestPlay}

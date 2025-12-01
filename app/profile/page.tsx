@@ -15,6 +15,7 @@ interface VideoData {
   title: string;
   channelTitle: string;
   duration: string;
+  durationSeconds?: number;
   thumbnailUrl: string;
   videoId: string;
   id?: string;
@@ -32,6 +33,7 @@ export default function ProfilePage() {
   const [authLoading, setAuthLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [totalDurationHours, setTotalDurationHours] = useState("0");
 
   const shareCopiedTimeoutRef = useRef<number | null>(null);
   const addControlRef = useRef<HTMLDivElement | null>(null);
@@ -163,6 +165,17 @@ export default function ProfilePage() {
           user_id: video.user_id || "",
         }));
         setVideos(formattedVideos);
+        
+        // Calculate total duration
+        if (data.length > 0) {
+          const totalSeconds = data.reduce((sum, video) => {
+            return sum + (video.duration_seconds || 0);
+          }, 0);
+          const hours = (totalSeconds / 3600).toFixed(1);
+          setTotalDurationHours(hours);
+        } else {
+          setTotalDurationHours("0");
+        }
       }
     } catch (error) {
       console.error("Error fetching videos:", error);
@@ -177,6 +190,7 @@ export default function ProfilePage() {
         title: videoData.title,
         channel_title: videoData.channelTitle,
         duration: videoData.duration,
+        duration_seconds: videoData.durationSeconds || null,
         thumbnail_url: videoData.thumbnailUrl,
         video_id: videoData.videoId,
       };
@@ -402,6 +416,8 @@ export default function ProfilePage() {
         onToggleAddInput={toggleInput}
         onCloseActive={handleCloseActive}
         addControlRef={addControlRef}
+        profileUsername={profile?.username}
+        totalDurationHours={totalDurationHours}
       />
     </main>
   );

@@ -5,6 +5,7 @@ export interface Video {
   title: string;
   channel_title: string;
   duration: string;
+  duration_seconds: number | null;
   thumbnail_url: string;
   video_id: string;
 }

@@ -1,17 +1,35 @@
 import { NextResponse } from 'next/server';
 
+// CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+// Handle OPTIONS request for CORS preflight
+export async function OPTIONS() {
+  return NextResponse.json({}, { headers: corsHeaders });
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const videoId = searchParams.get('videoId');
     
     if (!videoId) {
-      return NextResponse.json({ error: 'Video ID is required' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Video ID is required' }, 
+        { status: 400, headers: corsHeaders }
+      );
     }
     
     const apiKey = process.env.YOUTUBE_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: 'YouTube API key not configured' }, { status: 500 });
+      return NextResponse.json(
+        { error: 'YouTube API key not configured' }, 
+        { status: 500, headers: corsHeaders }
+      );
     }
     
     const response = await fetch(
@@ -19,21 +37,37 @@ export async function GET(request: Request) {
     );
     
     if (!response.ok) {
-      return NextResponse.json({ error: 'Failed to fetch video data' }, { status: response.status });
+      return NextResponse.json(
+        { error: 'Failed to fetch video data' }, 
+        { status: response.status, headers: corsHeaders }
+      );
     }
     
     const data = await response.json();
     
     if (!data.items || data.items.length === 0) {
-      return NextResponse.json({ error: 'Video not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Video not found' }, 
+        { status: 404, headers: corsHeaders }
+      );
     }
     
     const videoDetails = data.items[0];
     const snippet = videoDetails.snippet;
     const contentDetails = videoDetails.contentDetails;
     
-    // Convert ISO 8601 duration to human-readable format
-    const duration = contentDetails.duration.replace('PT', '')
+    // Keep the raw ISO 8601 duration for storage
+    const rawDuration = contentDetails.duration;
+    
+    // Parse ISO 8601 duration to seconds
+    const matches = rawDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    const hours = parseInt(matches?.[1] || "0");
+    const minutes = parseInt(matches?.[2] || "0");
+    const seconds = parseInt(matches?.[3] || "0");
+    const durationSeconds = hours * 3600 + minutes * 60 + seconds;
+    
+    // Convert to human-readable format for display
+    const duration = rawDuration.replace('PT', '')
       .replace('H', 'h ')
       .replace('M', 'm ')
       .replace('S', 's');
@@ -51,12 +85,17 @@ export async function GET(request: Request) {
       title: snippet.title,
       channelTitle: snippet.channelTitle,
       duration: duration,
+      rawDuration: rawDuration,
+      durationSeconds: durationSeconds,
       thumbnailUrl: bestThumbUrl,
       videoId: videoId
-    });
+    }, { headers: corsHeaders });
     
   } catch (error) {
     console.error('Error fetching YouTube data:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal server error' }, 
+      { status: 500, headers: corsHeaders }
+    );
   }
 }

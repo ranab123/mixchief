@@ -19,6 +19,7 @@ interface VideoRow {
   title: string;
   channel_title: string;
   duration: string;
+  duration_seconds: number | null;
   thumbnail_url: string;
   video_id: string;
   created_at: string;
@@ -34,6 +35,7 @@ export default function PublicProfilePage() {
   const [videos, setVideos] = useState<VideoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [totalDurationHours, setTotalDurationHours] = useState("0");
 
   const [shareCopied, setShareCopied] = useState(false);
   const shareCopiedTimeoutRef = useRef<number | null>(null);
@@ -93,6 +95,15 @@ export default function PublicProfilePage() {
             videosData?.length ?? 0
           );
           setVideos(videosData || []);
+          
+          // Calculate total duration
+          if (videosData && videosData.length > 0) {
+            const totalSeconds = videosData.reduce((sum, video) => {
+              return sum + (video.duration_seconds || 0);
+            }, 0);
+            const hours = (totalSeconds / 3600).toFixed(1);
+            setTotalDurationHours(hours);
+          }
         }
 
       } catch (err) {
@@ -197,9 +208,11 @@ export default function PublicProfilePage() {
         onRequestToggle={handleToggleRequest}
         onSeek={handleSeek}
         activeVideoId={activeVideoId}
-        onHomeClick={() => router.push("/")}
+        onHomeClick={() => router.push("/profile")}
         onCloseActive={handleCloseActive}
         showAddControl={false}
+        profileUsername={profile?.username}
+        totalDurationHours={totalDurationHours}
       />
     </main>
   );

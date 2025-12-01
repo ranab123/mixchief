@@ -17,6 +17,9 @@ function Disc3D({
   const DISC_SIZE_UNITS = 4.8;
   const meshRef = useRef<THREE.Mesh>(null);
   const map = useTexture("/images/discc.png");
+  // Track timers for cleanup
+  const spinResetTimerRef = useRef<number | null>(null);
+  
   // Keep color space correct
   useEffect(() => {
     if (map) {
@@ -24,6 +27,17 @@ function Disc3D({
       map.needsUpdate = true;
     }
   }, [map]);
+  
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (spinResetTimerRef.current !== null) {
+        clearTimeout(spinResetTimerRef.current);
+        spinResetTimerRef.current = null;
+      }
+    };
+  }, []);
+  
   const MAX_TILT = 0.22; // ~12.6 degrees
   // Spin state
   const angleRef = useRef<number>(0);
@@ -108,9 +122,14 @@ function Disc3D({
         if (Math.abs(accumulatedSpinRef.current) > CLICK_THRESHOLD) {
           if (wasSpinningRef) {
             wasSpinningRef.current = true;
+            // Clear existing timer before setting a new one
+            if (spinResetTimerRef.current !== null) {
+              clearTimeout(spinResetTimerRef.current);
+            }
             // Reset after a short delay to allow clicks again
-            setTimeout(() => {
+            spinResetTimerRef.current = window.setTimeout(() => {
               if (wasSpinningRef) wasSpinningRef.current = false;
+              spinResetTimerRef.current = null;
             }, 100);
           }
         }
@@ -130,9 +149,14 @@ function Disc3D({
         if (Math.abs(accumulatedSpinRef.current) > CLICK_THRESHOLD) {
           if (wasSpinningRef) {
             wasSpinningRef.current = true;
+            // Clear existing timer before setting a new one
+            if (spinResetTimerRef.current !== null) {
+              clearTimeout(spinResetTimerRef.current);
+            }
             // Reset after a short delay to allow clicks again
-            setTimeout(() => {
+            spinResetTimerRef.current = window.setTimeout(() => {
               if (wasSpinningRef) wasSpinningRef.current = false;
+              spinResetTimerRef.current = null;
             }, 100);
           }
         }
@@ -273,10 +297,20 @@ function CoverPlane({
   scale?: number;
   thickness?: number;
 }) {
+  const componentId = useRef(`CoverPlane-${src.split('/').pop()}-${Math.random().toString(36).substr(2, 9)}`);
+  
+  useEffect(() => {
+    console.log(`[${componentId.current}] MOUNTED`);
+    return () => {
+      console.log(`[${componentId.current}] UNMOUNTED`);
+    };
+  }, []);
+  
   const texture = useTexture(src);
 
   useMemo(() => {
     if (texture) {
+      console.log(`[${componentId.current}] Configuring main texture`);
       texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.anisotropy = 8;
@@ -290,21 +324,42 @@ function CoverPlane({
     }
   }, [texture]);
 
-  const boxGeomForEdges = useMemo(() => new THREE.BoxGeometry(aspect, 1, thickness), [aspect, thickness]);
+  const boxGeomForEdges = useMemo(() => {
+    console.log(`[${componentId.current}] Creating BoxGeometry`);
+    return new THREE.BoxGeometry(aspect, 1, thickness);
+  }, [aspect, thickness]);
+  
+  // Cleanup geometry on unmount or when deps change
+  useEffect(() => {
+    return () => {
+      if (boxGeomForEdges) {
+        console.log(`[${componentId.current}] Disposing BoxGeometry`);
+        boxGeomForEdges.dispose();
+      }
+    };
+  }, [boxGeomForEdges]);
+  
   const materials = useMemo(() => {
+    console.log(`[${componentId.current}] Creating materials (texture present: ${!!texture})`);
+    let textureCloneCount = 0;
+    
     // Safety: if no texture yet, fallback to neutral sides
-    const makeSideMaterial = (map?: THREE.Texture) =>
-      new THREE.MeshStandardMaterial({
+    const makeSideMaterial = (map?: THREE.Texture) => {
+      console.log(`[${componentId.current}] Creating MeshStandardMaterial (has map: ${!!map})`);
+      return new THREE.MeshStandardMaterial({
         map,
         roughness: 0.32,
         metalness: 0.06,
       });
+    };
 
     // Front face material with inner-border alpha + blur gradient
     const front = (() => {
       if (!texture) {
+        console.log(`[${componentId.current}] Creating fallback MeshBasicMaterial`);
         return new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.9 });
       }
+      console.log(`[${componentId.current}] Creating ShaderMaterial for front face`);
       const uniforms = {
         uMap: { value: texture as any },
         uPadding: { value: 0.15 },   // 15% padding band
@@ -388,6 +443,7 @@ function CoverPlane({
     })();
 
     if (!texture) {
+      console.log(`[${componentId.current}] No texture - returning fallback materials array`);
       return [
         makeSideMaterial(), // right
         makeSideMaterial(), // left
@@ -402,6 +458,8 @@ function CoverPlane({
     const edge = 0.02; // 2% strip to approximate edge/average color
     const mkClone = (ox: number, oy: number, rx: number, ry: number) => {
       const t = texture.clone();
+      textureCloneCount++;
+      console.log(`[${componentId.current}] Cloning texture #${textureCloneCount}`);
       t.needsUpdate = true;
       t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
       t.offset.set(ox, oy);
@@ -418,6 +476,8 @@ function CoverPlane({
     // Bottom side samples a thin row near y=0
     const bottomTex = mkClone(0, 0, 1, edge);
 
+    console.log(`[${componentId.current}] Created ${textureCloneCount} texture clones total`);
+    
     // Box material order: [px, nx, py, ny, pz, nz]
     return [
       makeSideMaterial(rightTex),  // right
@@ -427,7 +487,28 @@ function CoverPlane({
       front,                       // front (positive Z)
       makeSideMaterial(leftTex),   // back (use left sample as a neutral choice)
     ];
-  }, [texture, aspect, fadeAlpha]);
+  }, [texture, aspect]);
+
+  // Cleanup materials and textures on unmount or when deps change
+  useEffect(() => {
+    return () => {
+      console.log(`[${componentId.current}] Cleaning up materials array`);
+      if (Array.isArray(materials)) {
+        materials.forEach((mat, idx) => {
+          if (mat) {
+            // Dispose of textures used by the material
+            if ('map' in mat && mat.map) {
+              console.log(`[${componentId.current}] Disposing texture from material[${idx}]`);
+              mat.map.dispose();
+            }
+            // Dispose of the material itself
+            console.log(`[${componentId.current}] Disposing material[${idx}]`);
+            mat.dispose();
+          }
+        });
+      }
+    };
+  }, [materials]);
 
   return (
     <group rotation={[0, yRotationRad, 0]} onClick={onClick} scale={[scale, scale, 1]}>
@@ -479,7 +560,36 @@ export default function VinylStack3D({
   showShadows = true,
   showBorders = false,
 }: VinylStack3DProps) {
+  const renderCountRef = useRef(0);
+  renderCountRef.current++;
+  console.log(`[VinylStack3D] RENDER #${renderCountRef.current} - items count: ${items.length}`);
+  
   const containerRef = useRef<HTMLDivElement | null>(null);
+  
+  // Setup non-passive wheel event listener to allow preventDefault
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const sensitivity = 0.0018; // adjust scroll speed
+      // Reverse scroll direction: scroll down increases progress toward 1 (or vice versa)
+      const next = Math.min(1, Math.max(0, tTargetRef.current - e.deltaY * sensitivity));
+      console.log(`[VinylStack3D] Scroll event - deltaY: ${e.deltaY}, t: ${tTargetRef.current.toFixed(3)} → ${next.toFixed(3)}`);
+      tTargetRef.current = next;
+    };
+    
+    // Add with passive: false to allow preventDefault
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    console.log('[VinylStack3D] Added non-passive wheel listener');
+    
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+      console.log('[VinylStack3D] Removed wheel listener');
+    };
+  }, []);
   const [fov] = useState<number>(DEFAULT_CAMERA_FOV);
   const selectedIndexRef = useRef<number | null>(null);
   const [aspects, setAspects] = useState<number[]>([]);
@@ -487,6 +597,18 @@ export default function VinylStack3D({
   const tRef = useRef<number>(0);
   const tTargetRef = useRef<number>(0);
   const rafRef = useRef<number | null>(null);
+  // Responsive scaling for mobile
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const responsiveCoverScale = isMobile ? coverScale * 0.85 : coverScale;
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
   // Per-item hover smoothing for buttery transitions between neighbors
   const [hoverProgresses, setHoverProgresses] = useState<number[]>([]);
   const hoverProgressesRef = useRef<number[]>([]);
@@ -666,12 +788,19 @@ export default function VinylStack3D({
     overlayAlphaRef.current = overlayAlpha;
   }, [overlayAlpha]);
   useEffect(() => {
+    let lastLogTime = 0;
     function step() {
       const cur = tRef.current;
       const target = tTargetRef.current;
       const next = cur + (target - cur) * 0.12;
       if (Math.abs(next - cur) > 0.0005) {
         setT(next);
+        // Log only occasionally (every 500ms) to avoid console spam
+        const now = performance.now();
+        if (now - lastLogTime > 500) {
+          console.log(`[VinylStack3D] RAF: t animation ${cur.toFixed(3)} → ${next.toFixed(3)}`);
+          lastLogTime = now;
+        }
       }
       // per-item hover easing
       const hp = hoverProgressesRef.current;
@@ -686,7 +815,15 @@ export default function VinylStack3D({
           nextArr[i] = nv;
           if (Math.abs(nv - v) > 0.0005) changed = true;
         }
-        if (changed) setHoverProgresses(nextArr);
+        if (changed) {
+          // Log hover state changes occasionally
+          const now = performance.now();
+          if (now - lastLogTime > 500) {
+            console.log(`[VinylStack3D] RAF: Hover progresses updated`);
+            lastLogTime = now;
+          }
+          setHoverProgresses(nextArr);
+        }
       }
       // per-item facing easing
       const fp = faceProgressesRef.current;
@@ -781,14 +918,6 @@ export default function VinylStack3D({
         overflow: "hidden",
         zIndex: 0,
       }}
-      onWheel={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const sensitivity = 0.0018; // adjust scroll speed
-        // Reverse scroll direction: scroll down increases progress toward 1 (or vice versa)
-        const next = Math.min(1, Math.max(0, tTargetRef.current - e.deltaY * sensitivity));
-        tTargetRef.current = next;
-      }}
     >
       <Canvas
         orthographic={DEFAULT_USE_ORTHO}
@@ -822,9 +951,11 @@ export default function VinylStack3D({
             // Hide other items only while one is actively selected.
             // When selection is cleared, show the full stack immediately again.
             if (selectedIndex !== null && selectedIndex !== i) {
+              console.log(`[VinylStack3D] Skipping render for item ${i} (${item.title || item.videoId}) - selected=${selectedIndex}`);
               return null;
             }
 
+            console.log(`[VinylStack3D] Rendering item ${i} (${item.title || item.videoId})`);
             const aspect = aspects[i] ?? 1;
             const s = i - t * k;
             const sOut = s; // keep conveyor position unchanged for hover
@@ -862,11 +993,11 @@ export default function VinylStack3D({
             const badgeRadius = 0.12;
             // Extra padding so the badge isn't glued to the edges
             const badgePadding = 0.05;
-            const coverHalfWidth = (aspect * coverScale) / 2;
-            const coverHalfHeight = coverScale / 2;
+            const coverHalfWidth = (aspect * responsiveCoverScale) / 2;
+            const coverHalfHeight = responsiveCoverScale / 2;
             const badgeX = coverHalfWidth - (badgeRadius + badgePadding);
             const badgeY = -coverHalfHeight + (badgeRadius + badgePadding);
-            const badgeZ = (coverThickness * coverScale) / 2 + 0.03;
+            const badgeZ = (coverThickness * responsiveCoverScale) / 2 + 0.03;
 
             return (
               <group
@@ -962,7 +1093,7 @@ export default function VinylStack3D({
                     opacity={1}
                     showBorders={showBorders}
                     yRotationRad={0}
-                    scale={coverScale}
+                    scale={responsiveCoverScale}
                     thickness={coverThickness}
                     onClick={undefined}
                   />
@@ -1032,7 +1163,7 @@ export default function VinylStack3D({
           <ContactShadows
             position={[0, -0.8, 0]}
             opacity={0.45}
-            scale={6 * coverScale}
+            scale={6 * responsiveCoverScale}
             blur={1.3}
             far={1.2}
             resolution={1024}
@@ -1069,8 +1200,12 @@ export default function VinylStack3D({
         >
           {(() => {
             // Keep the disc comfortably sized; default to 360px if measurement is unavailable/small
+            // On mobile (width < 768px), use full screen width (or even slightly larger)
             const measured = discWidthPx ? Math.round(discWidthPx) : 0;
-            const discPx = Math.max(480, measured);
+            const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+            const discPx = isMobile 
+              ? window.innerWidth // full screen width, no constraints
+              : Math.max(480, measured);
             return (
               <>
                 <Canvas
@@ -1125,6 +1260,8 @@ export default function VinylStack3D({
                     style={{
                       marginTop: "16px",
                       maxWidth: `${discPx}px`,
+                      width: "100%",
+                      padding: isMobile ? "0 16px" : "0",
                     }}
                   >
                     {/* Timecode row: current (left) and duration (right) */}
@@ -1136,15 +1273,15 @@ export default function VinylStack3D({
                         gap: "12px",
                         width: "100%",
                         fontFamily: "IBM Plex Mono, monospace",
-                        fontSize: "18px",
+                        fontSize: isMobile ? "20px" : "18px",
                         fontWeight: "bold",
-                        letterSpacing: "2px",
+                        letterSpacing: isMobile ? "2px" : "2px",
                         color: "#000000",
                         marginBottom: "12px",
                       }}
                     >
                       {/* Current position */}
-                      <div style={{ flex: "1 1 auto", textAlign: "left", whiteSpace: "nowrap" }}>
+                      <div style={{ flex: "1 1 auto", textAlign: "left", whiteSpace: "nowrap", overflow: "hidden" }}>
                         {(() => {
                           function pad(n: number) { return String(n).padStart(2, "0"); }
                           const h = Math.floor(currentTime / 3600);
@@ -1154,7 +1291,7 @@ export default function VinylStack3D({
                         })()}
                       </div>
                       {/* Total duration (formatted to HH:MM:SS) */}
-                      <div style={{ flex: "1 1 auto", textAlign: "right", whiteSpace: "nowrap" }}>
+                      <div style={{ flex: "1 1 auto", textAlign: "right", whiteSpace: "nowrap", overflow: "hidden" }}>
                         {(() => {
                           const raw = items[selectedIndex]?.duration || "";
                           function pad(n: number) { return String(n).padStart(2, "0"); }
@@ -1203,9 +1340,9 @@ export default function VinylStack3D({
                       style={{
                         display: "block",
                         fontFamily: "IBM Plex Mono, monospace",
-                        fontSize: "18px",
+                        fontSize: isMobile ? "20px" : "18px",
                         fontWeight: "bold",
-                        letterSpacing: "2px",
+                        letterSpacing: isMobile ? "2px" : "2px",
                         color: "#000000",
                         textAlign: "justify",
                         wordWrap: "break-word",
@@ -1233,18 +1370,18 @@ export default function VinylStack3D({
                         gap: "12px",
                         width: "100%",
                         fontFamily: "IBM Plex Mono, monospace",
-                        fontSize: "18px",
+                        fontSize: isMobile ? "20px" : "18px",
                         fontWeight: "bold",
-                        letterSpacing: "2px",
+                        letterSpacing: isMobile ? "2px" : "2px",
                         color: "#000000",
                       }}
                     >
                       {/* Channel poster (title) left-aligned */}
-                      <div style={{ flex: "1 1 auto", textAlign: "left", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <div style={{ flex: "1 1 auto", textAlign: "left", whiteSpace: isMobile ? "normal" : "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {items[selectedIndex].channelTitle ? String(items[selectedIndex].channelTitle).toUpperCase() : ""}
                       </div>
                       {/* Date right-aligned */}
-                      <div style={{ flex: "1 1 auto", textAlign: "right", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <div style={{ flex: "1 1 auto", textAlign: "right", whiteSpace: isMobile ? "normal" : "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {(() => {
                           if (!items[selectedIndex].created_at) return "";
                           const d = new Date(items[selectedIndex].created_at!);

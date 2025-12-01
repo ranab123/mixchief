@@ -35,8 +35,12 @@ export function YouTubePlayerProvider({ children }: { children: ReactNode }) {
     
     const originalError = console.error;
     console.error = (...args: any[]) => {
-      // Filter out YouTube postMessage origin errors
-      if (args[0]?.toString().includes("postMessage") || args[0]?.toString().includes("target origin")) {
+      const msg = args[0]?.toString() || '';
+      // Filter out YouTube postMessage origin errors and DOMWindow errors
+      if (msg.includes("postMessage") || 
+          msg.includes("target origin") || 
+          msg.includes("DOMWindow") ||
+          msg.includes("recipient window's origin")) {
         return;
       }
       originalError.apply(console, args);
@@ -78,11 +82,12 @@ export function YouTubePlayerProvider({ children }: { children: ReactNode }) {
       apiReadyRef.current = true;
       if (!playerRef.current) {
         // Get the current origin for proper iframe communication
-        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '*';
+        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
         
         playerRef.current = new w.YT.Player("hidden-yt-player", {
           width: "1",
           height: "1",
+          host: 'https://www.youtube.com', // Explicitly set host
           playerVars: {
             autoplay: 0,
             controls: 0,
@@ -92,13 +97,21 @@ export function YouTubePlayerProvider({ children }: { children: ReactNode }) {
             iv_load_policy: 3,
             playsinline: 1,
             origin: currentOrigin, // Specify origin to prevent postMessage errors
+            enablejsapi: 1, // Enable JS API
           },
           events: {
+            onReady: () => {
+              // Player is ready
+            },
             onStateChange: (e: any) => {
               const YTState = w.YT?.PlayerState ?? {};
               if (e.data === YTState.PLAYING) setIsPlaying(true);
               else if ([YTState.PAUSED, YTState.ENDED].includes(e.data))
                 setIsPlaying(false);
+            },
+            onError: (e: any) => {
+              // Suppress YouTube player errors silently
+              console.log('YouTube player error (suppressed):', e.data);
             },
           },
         });

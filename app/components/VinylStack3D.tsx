@@ -501,6 +501,24 @@ function CameraSetup({ position, lookAt }: { position: [number, number, number];
     camera.position.set(position[0], position[1], position[2]);
     camera.lookAt(lookAt[0], lookAt[1], lookAt[2]);
     gl.sortObjects = true;
+    
+    // Handle WebGL context loss
+    const canvas = gl.domElement;
+    const handleContextLost = (event: Event) => {
+      event.preventDefault();
+      console.log('WebGL context lost, will restore...');
+    };
+    const handleContextRestored = () => {
+      console.log('WebGL context restored');
+    };
+    
+    canvas.addEventListener('webglcontextlost', handleContextLost, false);
+    canvas.addEventListener('webglcontextrestored', handleContextRestored, false);
+    
+    return () => {
+      canvas.removeEventListener('webglcontextlost', handleContextLost);
+      canvas.removeEventListener('webglcontextrestored', handleContextRestored);
+    };
   }, [camera, gl, position[0], position[1], position[2], lookAt[0], lookAt[1], lookAt[2]]);
   return null;
 }
@@ -537,6 +555,32 @@ export default function VinylStack3D({
 }: VinylStack3DProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   
+  // Suppress console warnings from Three.js and other libraries
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    const originalWarn = console.warn;
+    console.warn = (...args: any[]) => {
+      const msg = args[0]?.toString() || '';
+      // Filter out passive event listener warnings and Three.js warnings
+      if (msg.includes("passive event listener") || 
+          msg.includes("non-passive") ||
+          msg.includes("scroll-blocking")) {
+        return;
+      }
+      originalWarn.apply(console, args);
+    };
+
+    return () => {
+      console.warn = originalWarn;
+    };
+  }, []);
+  
+  // Track touch scrolling state
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const isScrollingRef = useRef<boolean>(false);
+  const scrollTimeoutRef = useRef<number | null>(null);
+  
   // Setup non-passive wheel event listener to allow preventDefault
   useEffect(() => {
     const container = containerRef.current;
@@ -558,6 +602,78 @@ export default function VinylStack3D({
       container.removeEventListener('wheel', handleWheel);
     };
   }, []);
+  
+  // Setup touch event handlers for mobile scrolling
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const handleTouchStart = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      touchStartRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: Date.now(),
+      };
+      isScrollingRef.current = false;
+      
+      // Clear any existing scroll timeout
+      if (scrollTimeoutRef.current !== null) {
+        clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = null;
+      }
+    };
+    
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!touchStartRef.current) return;
+      
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - touchStartRef.current.x;
+      const deltaY = touch.clientY - touchStartRef.current.y;
+      
+      // If vertical movement is significant, treat as scroll
+      if (Math.abs(deltaY) > 10) {
+        isScrollingRef.current = true;
+        e.preventDefault(); // Prevent default touch behavior
+        
+        const sensitivity = 0.003; // Touch scroll sensitivity
+        const next = Math.min(1, Math.max(0, tTargetRef.current + deltaY * sensitivity));
+        tTargetRef.current = next;
+        
+        // Reset touch start to current position for continuous scrolling
+        touchStartRef.current = {
+          x: touch.clientX,
+          y: touch.clientY,
+          time: Date.now(),
+        };
+      }
+    };
+    
+    const handleTouchEnd = () => {
+      // Keep scrolling state active for a short time to prevent hover triggers
+      if (isScrollingRef.current) {
+        scrollTimeoutRef.current = window.setTimeout(() => {
+          isScrollingRef.current = false;
+        }, 200);
+      }
+      touchStartRef.current = null;
+    };
+    
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd);
+    container.addEventListener('touchcancel', handleTouchEnd);
+    
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
+      if (scrollTimeoutRef.current !== null) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
   const [fov] = useState<number>(DEFAULT_CAMERA_FOV);
   const selectedIndexRef = useRef<number | null>(null);
   const [aspects, setAspects] = useState<number[]>([]);
@@ -567,11 +683,14 @@ export default function VinylStack3D({
   const rafRef = useRef<number | null>(null);
   // Responsive scaling for mobile
   const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [isTouchDevice, setIsTouchDevice] = useState<boolean>(false);
   const responsiveCoverScale = isMobile ? coverScale * 0.85 : coverScale;
   
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
+      // Check if device supports touch
+      setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
@@ -886,7 +1005,13 @@ export default function VinylStack3D({
           far: 1000,
         }}
         dpr={[1, 2]}
-        gl={{ alpha: true, antialias: true }}
+        gl={{ 
+          alpha: true, 
+          antialias: true,
+          powerPreference: 'high-performance',
+          preserveDrawingBuffer: false,
+          failIfMajorPerformanceCaveat: false,
+        }}
         style={{ width: "100%", height: "100%", position: "relative", zIndex: 2 }}
       >
         <CameraSetup position={cameraPosition} lookAt={cameraLookAt} />
@@ -1012,6 +1137,9 @@ export default function VinylStack3D({
                 }}
                 onPointerOver={(e) => {
                   e.stopPropagation();
+                  // Disable hover on touch devices or while scrolling
+                  if (isTouchDevice || isScrollingRef.current) return;
+                  
                   // If hover is locked on another vinyl, hovering a different one unlocks it
                   if (hoverLockIndexRef.current !== null && hoverLockIndexRef.current !== i) {
                     hoverLockIndexRef.current = null;
@@ -1025,6 +1153,9 @@ export default function VinylStack3D({
                   setTooltip({ text: title, x: e.clientX + 12, y: e.clientY + 16, visible: !!title });
                 }}
                 onPointerMove={(e) => {
+                  // Disable on touch devices or while scrolling
+                  if (isTouchDevice || isScrollingRef.current) return;
+                  
                   // follow cursor
                   if (tooltip.visible) {
                     setTooltip((prev) => ({ ...prev, x: e.clientX + 12, y: e.clientY + 16 }));
@@ -1032,6 +1163,9 @@ export default function VinylStack3D({
                 }}
                 onPointerOut={(e) => {
                   e.stopPropagation();
+                  // Disable on touch devices or while scrolling
+                  if (isTouchDevice || isScrollingRef.current) return;
+                  
                   // decay this one too
                   const arr = hoverTargetsRef.current.slice();
                   if (arr[i] !== undefined) arr[i] = 0;
@@ -1051,11 +1185,14 @@ export default function VinylStack3D({
                     onClick={undefined}
                   />
                 </Suspense>
-                {p > 0.35 && onDelete && (
+                {p > 0.35 && onDelete && !isTouchDevice && (
                   <group
                     position={[badgeX, badgeY, badgeZ]}
                     onPointerOver={(e) => {
                       e.stopPropagation();
+                      // Disable on touch devices or while scrolling
+                      if (isTouchDevice || isScrollingRef.current) return;
+                      
                       // Treat hovering the minus as hovering the cover
                       const arr = hoverTargetsRef.current.slice();
                       for (let j = 0; j < arr.length; j++) arr[j] = j === i ? 1 : 0;
@@ -1069,6 +1206,9 @@ export default function VinylStack3D({
                       });
                     }}
                     onPointerMove={(e) => {
+                      // Disable on touch devices or while scrolling
+                      if (isTouchDevice || isScrollingRef.current) return;
+                      
                       // Keep DELETE tooltip following the cursor
                       setTooltip((prev) =>
                         prev.visible && prev.text === "DELETE"
@@ -1165,6 +1305,12 @@ export default function VinylStack3D({
                   // Use perspective so tilt visibly foreshortens
                   camera={{ position: [0, 0, 6], fov: 45, near: 0.1, far: 1000 }}
                   dpr={[1, 2]}
+                  gl={{ 
+                    alpha: true,
+                    powerPreference: 'high-performance',
+                    preserveDrawingBuffer: false,
+                    failIfMajorPerformanceCaveat: false,
+                  }}
                   style={{
                     width: `${discPx}px`,
                     height: `${discPx}px`,

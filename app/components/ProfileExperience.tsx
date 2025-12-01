@@ -177,23 +177,30 @@ export default function ProfileExperience({
           ${ibmPlexMono.className}
         `}
       >
-        <div className="inline-block">
+        <div className="inline-block w-full">
           {!showOwnerActions ? (
             <button
               type="button"
               onClick={onHomeClick}
-              className="text-3xl md:text-6xl font-normal tracking-normal text-black md:hover:text-gray-500 cursor-pointer"
+              className="font-normal tracking-normal text-black md:hover:text-gray-500 cursor-pointer w-full text-left md:text-6xl"
+              style={{ fontSize: 'clamp(24px, 10vw, 3.75rem)' }}
             >
               MIXCHIEF
             </button>
           ) : (
-            <h1 className="text-3xl md:text-6xl font-normal tracking-normal text-black">
+            <h1 
+              className="font-normal tracking-normal text-black w-full md:text-6xl"
+              style={{ fontSize: 'clamp(24px, 10vw, 3.75rem)' }}
+            >
               MIXCHIEF
             </h1>
           )}
         </div>
 
-        <div className="mt-3 md:mt-6 text-black text-[7px] md:text-sm font-bold tracking-[0.18em]">
+        <div 
+          className="mt-3 md:mt-6 text-black font-bold tracking-[0.18em] md:text-sm w-full"
+          style={{ fontSize: 'clamp(6px, 2vw, 0.875rem)' }}
+        >
           <div className="flex justify-between uppercase">
             <div>
               {showOwnerActions ? "YOUR MIXES:" : profileUsername ? `${profileUsername}'S MIXES:` : "MIXES:"}

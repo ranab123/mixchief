@@ -455,7 +455,7 @@ export default function ProfileExperience({
                   ${ibmPlexMono.className}
                   z-30
                 `}
-                style={{ right: "calc(50% + 5px)" }}
+                style={{ right: "calc(50% - 1px)" }}
                 onClick={(e) => e.stopPropagation()}
               >
                 <input

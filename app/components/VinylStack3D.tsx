@@ -636,7 +636,7 @@ export default function VinylStack3D({
         isScrollingRef.current = true;
         e.preventDefault(); // Prevent default touch behavior
         
-        const sensitivity = 0.003; // Touch scroll sensitivity
+        const sensitivity = 0.0012; // Touch scroll sensitivity (reduced from 0.003 for less sensitive, smoother scrolling)
         const next = Math.min(1, Math.max(0, tTargetRef.current + deltaY * sensitivity));
         tTargetRef.current = next;
         
@@ -878,7 +878,8 @@ export default function VinylStack3D({
     function step() {
       const cur = tRef.current;
       const target = tTargetRef.current;
-      const next = cur + (target - cur) * 0.12;
+      const ease = 0.08; // Reduced from 0.12 for smoother, more fluid scrolling
+      const next = cur + (target - cur) * ease;
       if (Math.abs(next - cur) > 0.0005) {
         setT(next);
       }

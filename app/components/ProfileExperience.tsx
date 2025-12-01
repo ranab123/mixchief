@@ -171,7 +171,7 @@ export default function ProfileExperience({
       <div
         className={`
           fixed top-8 left-4 md:left-8 text-left
-          w-[80%] md:w-auto
+          w-[50%] md:w-auto
           transition-opacity duration-1000
           ${activeVideoId ? "z-0 opacity-0 pointer-events-none" : "z-40 opacity-100"}
           ${ibmPlexMono.className}
@@ -182,18 +182,18 @@ export default function ProfileExperience({
             <button
               type="button"
               onClick={onHomeClick}
-              className="text-6xl md:text-6xl font-normal tracking-normal text-black md:hover:text-gray-500 cursor-pointer"
+              className="text-3xl md:text-6xl font-normal tracking-normal text-black md:hover:text-gray-500 cursor-pointer"
             >
               MIXCHIEF
             </button>
           ) : (
-            <h1 className="text-6xl md:text-6xl font-normal tracking-normal text-black">
+            <h1 className="text-3xl md:text-6xl font-normal tracking-normal text-black">
               MIXCHIEF
             </h1>
           )}
         </div>
 
-        <div className="mt-6 text-black text-sm md:text-sm font-bold tracking-[0.18em]">
+        <div className="mt-3 md:mt-6 text-black text-[7px] md:text-sm font-bold tracking-[0.18em]">
           <div className="flex justify-between uppercase">
             <div>
               {showOwnerActions ? "YOUR MIXES:" : profileUsername ? `${profileUsername}'S MIXES:` : "MIXES:"}
